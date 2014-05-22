@@ -21,6 +21,7 @@ Examples
 After you've compiled the module, open up httpd.conf
 and type in:
 
+	LoadModule wl_module modules/mod_wl.so
 	WLEnabled On
 	WLDebug On
 	WLBot "Googlebot/2.1 | bingbot/2.1"
