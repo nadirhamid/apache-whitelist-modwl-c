@@ -21,11 +21,9 @@ Examples
 After you've compiled the module, open up httpd.conf
 and type in:
 
-	<Directory "/">
-		WLEnabled On
-		WLDebug On
-		WLBot "Googlebot/2.1 | bingbot/2.1"
-	</Directory>
+	WLEnabled On
+	WLDebug On
+	WLBot "Googlebot/2.1 | bingbot/2.1"
 
 And then point your browser to
 {your_machines_ip}/any_static_file.html
@@ -34,6 +32,9 @@ and see the output it should look something like:
 
 	WLEnabled: 1
 	WLDebug: 1
+	Initialized bot: Googlebot/2.1
+	User Agent: {user_agent_string}
+	Request landed in whitelist
 
 Setting up a whitelist and blacklist
 ------------------------
@@ -69,7 +70,7 @@ Here's an example of handling a bad user agent
 We can do the same thing for whitelists as follows:
 WLAcceptedHandler "./"
 
-Matching any user agent
+Any user agent
 -----------------
 
 	<Directory "/">
@@ -93,4 +94,4 @@ Matching browsers
 		WLBot "Mozilla5.0 | WebKit1.0 | Safari"
 	</Directory>
 
-Run against the desired these browsers and
+More coming soon..
