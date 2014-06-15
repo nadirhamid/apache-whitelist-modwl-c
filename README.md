@@ -1,14 +1,18 @@
 Apache White List Module
 ===================================================
 
-A module to reverse DNS then forward DNS. Goal is to
-prevent spoofing of an incoming user agent. 
+A module to reverse DNS then forward DNS. 
+This is a useful module for preventing
+unwanted user agents from accessing your 
+website. Exact procedure to acheive
+this is described below: 
 
 More information here:
 https://support.google.com/webmasters/answer/80553?hl=en
 
 An overview can also be found at:
 https://modules.apache.org/modules.lua?id=13738
+
 
 Examples
 ------------------------------------
@@ -17,7 +21,7 @@ Examples
 
 	apxs -x -c a mod_wl.c
 
--------------------------
+------------------------------------
 
 Starting off
 -----------------------------------
@@ -33,8 +37,7 @@ and type in:
 And then point your browser to
 {your_machines_ip}/any_static_file.html
 
-and see the output it should look something like:
-
+the output should look something like:
 	WLEnabled: 1
 	WLDebug: 1
 	Initialized bot: Googlebot/2.1
@@ -44,8 +47,8 @@ and see the output it should look something like:
 Setting up a whitelist and blacklist
 ------------------------
 
-To keep a reference of "good" useragents
-and bad ones there are whitelists 
+To keep a reference of "good" and "bad" useragents -- useful
+for performace.
 
 	<Directory "/">
 		WLEnabled On
@@ -62,8 +65,8 @@ keep the bad ones.
 Handling bad agents
 ---------------------
 
-Sometimes we may want to do something with spoofed user agents. 
-Here's an example of handling a bad user agent
+Sometimes we may want to do something with unwanted user agents. 
+Here's an example of handling one 
 
 	<Directory "/">
 		WLEnabled On
@@ -72,7 +75,9 @@ Here's an example of handling a bad user agent
 		WLBlockedHandler "./blocked/why.html"
 	</Directory>
 
-We can do the same thing for whitelists as follows:
+This will simply point any blocked user agent to "./blocked/why.html".
+
+We can also do the same thing with whitelists as follows:
 WLAcceptedHandler "./"
 
 Any user agent
@@ -89,7 +94,6 @@ Any user agent
 This will watch any user agent and on a successful
 request, add to the bot list. 
 
-For more examples, check ./tests/
 
 Matching browsers
 ------------------
@@ -98,5 +102,15 @@ Matching browsers
 		WLEnable On
 		WLBot "Mozilla5.0 | WebKit1.0 | Safari"
 	</Directory>
+
+More Examples
+------------------
+You can find more examples in ./tests. 
+
+Contributing
+-----------------
+Have a suggestion or want to add code to the 
+project? I'm always ears on pro buno, give me a shout
+@ matrix.nad@gmail.com   
 
 More coming soon..
