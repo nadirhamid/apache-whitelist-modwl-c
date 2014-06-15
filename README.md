@@ -17,9 +17,10 @@ Examples
 
 	apxs -x -c a mod_wl.c
 
-	Starting off
-
 -------------------------
+
+Starting off
+==================================================
 
 After you've compiled the module, open up httpd.conf
 and type in:
