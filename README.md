@@ -2,12 +2,8 @@ Apache White List Module
 ===================================================
 
 This module will perform reverse and forward lookups on an incoming ip.
-Afterwards perform the required action based on the config. 
-
-Useful for preventing
-unwanted user agents from accessing your 
-website. Exact procedure to acheive
-this is described below: 
+Afterwards perform the required action based on the config. this is useful for preventing unwanted user agents from accessing your 
+website. 
 
 More information here:
 https://support.google.com/webmasters/answer/80553?hl=en
