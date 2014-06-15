@@ -20,7 +20,7 @@ Examples
 -------------------------
 
 Starting off
-==================================================
+-----------------------------------
 
 After you've compiled the module, open up httpd.conf
 and type in:
