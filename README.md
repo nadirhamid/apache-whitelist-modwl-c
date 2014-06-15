@@ -1,7 +1,9 @@
 Apache White List Module
 ===================================================
 
-A module to reverse DNS then forward DNS. 
+This module will perform reverse and forward lookups on an incoming ip.
+Afterwards perform the required action based on the config. 
+
 Useful for preventing
 unwanted user agents from accessing your 
 website. Exact procedure to acheive
