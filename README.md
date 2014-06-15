@@ -2,7 +2,7 @@ Apache White List Module
 ===================================================
 
 A module to reverse DNS then forward DNS. 
-This is a useful module for preventing
+Useful for preventing
 unwanted user agents from accessing your 
 website. Exact procedure to acheive
 this is described below: 
@@ -103,9 +103,13 @@ Matching browsers
 		WLBot "Mozilla5.0 | WebKit1.0 | Safari"
 	</Directory>
 
+No different from matching any search engine
+bot.
+
 More Examples
 ------------------
 You can find more examples in ./tests. 
+
 
 Contributing
 -----------------
