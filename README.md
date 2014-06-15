@@ -12,7 +12,7 @@ An overview can also be found at:
 https://modules.apache.org/modules.lua?id=13738
 
 
-Examples
+Compiling
 ------------------------------------
 
 	compiling:
@@ -36,6 +36,7 @@ And then point your browser to
 {your_machines_ip}/any_static_file.html
 
 the output should look something like:
+
 	WLEnabled: 1
 	WLDebug: 1
 	Initialized bot: Googlebot/2.1
