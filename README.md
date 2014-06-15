@@ -7,6 +7,9 @@ prevent spoofing of an incoming user agent.
 More information here:
 https://support.google.com/webmasters/answer/80553?hl=en
 
+Also information can also be found here:
+https://modules.apache.org/modules.lua?id=13738
+
 Examples
 ------------------------------------
 
