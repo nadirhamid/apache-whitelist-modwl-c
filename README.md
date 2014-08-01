@@ -107,6 +107,8 @@ bot.
 
 
 Using mod_wl with PHP, Python, etc.
+-----------------------------------
+
 	<Directory "/">
 		WLEnabled On
 		WLDebug On
@@ -118,6 +120,7 @@ This tells the module we want to upstream all
 requests to a higher level language.
 
 Some PHP code to put it together
+
 	echo "Original Address is: " . $_SERVER{'MODWL_ORIGINAL'} . '<br />';
 	echo "Reverse DNS is: $_SERVER{'MODWL_REVERSE_DNS'} . '<br/>';
 	echo "Forward DNS is: $_SERVER{'MODWL_FORWARD_DNS'} . '<br/>';
