@@ -50,6 +50,7 @@
 #include "http_protocol.h"
 #include "http_request.h"
 #include "apr_tables.h"
+#include "apr_strings.h"
 #ifdef __WIN32
 
 #else
@@ -768,7 +769,7 @@ static int wl_init(request_rec* rec)
     addr = initial = rec->connection->remote_ip;
 
     if (wl_cfg->interop == 1)
-	apr_table_set(rec->subprocessenv, "MODWL_ORIGINAL", addr);
+	apr_table_set(rec->subprocess_env, "MODWL_ORIGINAL", addr);
 
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
@@ -826,7 +827,7 @@ static int wl_init(request_rec* rec)
     addr = wl_reverse_dns(addr);
 
     if (wl_cfg->interop == 1)
-	apr_table_set(rec->subprocessenv, "MODWL_REVERSE_DNS", addr);
+	apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
 
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
@@ -840,7 +841,7 @@ static int wl_init(request_rec* rec)
     addr = wl_forward_dns(addr);
 
     if (wl_cfg->interop == 1)
-	apr_table_set(rec->subprocessenv, "MODWL_FORWARD_DNS", addr);
+	apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
 
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
@@ -861,7 +862,7 @@ static int wl_init(request_rec* rec)
         wl_append_wl(initial);
         wl_append_list(wl_cfg->list, initial, rec);
         wl_accepted_handler(rec, wl_cfg->ahandler);
-	apr_table_set(rec->subprocessenv, "MODWL_STATUS", "Accepted");
+	apr_table_set(rec->subprocess_env, "MODWL_STATUS", "Accepted");
 
         return wl_close(OK);
     } else {
@@ -871,7 +872,7 @@ static int wl_init(request_rec* rec)
         wl_append_bl(initial);
         wl_append_list(wl_cfg->blist, initial, rec);
         wl_blocked_handler(rec, wl_cfg->bhandler);
-	apr_table_set(rec->subprocessenv, "MODWL_STATUS", "Declined");
+	apr_table_set(rec->subprocess_env, "MODWL_STATUS", "Declined");
     }
    
 
