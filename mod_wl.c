@@ -700,6 +700,7 @@ static void wl_show_variables(wl_config* wl_cfg, request_rec* rec)
     ap_rprintf(rec, "WLBotlist: %s\n", wl_cfg->btlist);
     ap_rprintf(rec, "WLBotAutoAdd: %d\n", wl_cfg->btauto);
     ap_rprintf(rec, "WLDNSTimeout: %d\n", wl_cfg->dnstimeout);
+    ap_rprintf(rec, "WLInterop: %d\n", wl_cfg->interop);
     ap_rprintf(rec, "WLBlockedHandler: %s\n", wl_cfg->bhandler);
     ap_rprintf(rec, "WLAcceptedHandler: %s\n", wl_cfg->ahandler);
 }
@@ -766,6 +767,9 @@ static int wl_init(request_rec* rec)
 
     addr = initial = rec->connection->remote_ip;
 
+    if (wl_cfg->interop == 1)
+	apr_table_set(rec->subprocessenv, "MODWL_ORIGINAL", addr);
+
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
         ap_rprintf(rec, "Original remote ip is: %s\n", addr);
@@ -820,7 +824,10 @@ static int wl_init(request_rec* rec)
     }
 
     addr = wl_reverse_dns(addr);
-    
+
+    if (wl_cfg->interop == 1)
+	apr_table_set(rec->subprocessenv, "MODWL_REVERSE_DNS", addr);
+
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
         ap_rprintf(rec, "Reverse dns is: %s\n", addr);
@@ -831,6 +838,9 @@ static int wl_init(request_rec* rec)
      * dns
      */
     addr = wl_forward_dns(addr);
+
+    if (wl_cfg->interop == 1)
+	apr_table_set(rec->subprocessenv, "MODWL_FORWARD_DNS", addr);
 
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
@@ -851,6 +861,8 @@ static int wl_init(request_rec* rec)
         wl_append_wl(initial);
         wl_append_list(wl_cfg->list, initial, rec);
         wl_accepted_handler(rec, wl_cfg->ahandler);
+	apr_table_set(rec->subprocessenv, "MODWL_FORWARD_DNS", addr);
+
         return wl_close(OK);
     } else {
         if (wl_cfg->btauto == 1)
