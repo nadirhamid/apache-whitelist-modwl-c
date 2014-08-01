@@ -64,14 +64,14 @@
 #define WL_MODULE_CORE_PRIVATE 1
 #define WL_MODULE_DEBUG_MODE 1 
 #define WL_MODULE_ACCESS_CONFIG 1 
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_1					"Googlebot/2.1 (+http)"
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_2							  "bingbot/2.1"
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_3						     "Yahoo! Slurp"
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_4					  			   "Yandex"
-#define WL_MODULE_GOOGLEBOT_CAPTION								    "googlebot.com"
-#define WL_MODULE_YAHOOBOT_CAPTION								    "ac2.yahoo.com" 
-#define WL_MODULE_BINGBOT_CAPTION							       "search.msn.com" 
-#define WL_MODULE_YANDEXBOT_CAPTION									   "yandex.com"
+#define WL_MODULE_DEBUG_UNITTEST_AGENT_1				"Googlebot/2.1 (+http)"
+#define WL_MODULE_DEBUG_UNITTEST_AGENT_2					  "bingbot/2.1"
+#define WL_MODULE_DEBUG_UNITTEST_AGENT_3		 		         "Yahoo! Slurp"
+#define WL_MODULE_DEBUG_UNITTEST_AGENT_4					       "Yandex"
+#define WL_MODULE_GOOGLEBOT_CAPTION					        "googlebot.com"
+#define WL_MODULE_YAHOOBOT_CAPTION					        "ac2.yahoo.com" 
+#define WL_MODULE_BINGBOT_CAPTION					       "search.msn.com" 
+#define WL_MODULE_YANDEXBOT_CAPTION						   "yandex.com"
 
 typedef struct {
     char*          wl_dns_forward;
@@ -861,7 +861,7 @@ static int wl_init(request_rec* rec)
         wl_append_wl(initial);
         wl_append_list(wl_cfg->list, initial, rec);
         wl_accepted_handler(rec, wl_cfg->ahandler);
-	apr_table_set(rec->subprocessenv, "MODWL_FORWARD_DNS", addr);
+	apr_table_set(rec->subprocessenv, "MODWL_STATUS", "Accepted");
 
         return wl_close(OK);
     } else {
@@ -871,8 +871,10 @@ static int wl_init(request_rec* rec)
         wl_append_bl(initial);
         wl_append_list(wl_cfg->blist, initial, rec);
         wl_blocked_handler(rec, wl_cfg->bhandler);
+	apr_table_set(rec->subprocessenv, "MODWL_STATUS", "Declined");
     }
-    
+   
+
     return wl_close(DECLINED);
 }
 
