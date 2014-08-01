@@ -37,7 +37,7 @@
 #include <string.h>
 
 /* windows setup */
-#if def WIN32
+#ifdef WIN32
 #include <winsock2.h>
 #include <Ws2tcpip.h>
 
