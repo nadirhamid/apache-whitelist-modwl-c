@@ -29,7 +29,7 @@
  * Based on mod_spamhaus
  */
 
-#include <stdio. h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <regex.h>
