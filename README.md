@@ -17,7 +17,7 @@ Compiling
 
 	compiling:
 
-	apxs -x -c a mod_wl.c
+	apxs -i -a -c mod_wl.c
 
 ------------------------------------
 

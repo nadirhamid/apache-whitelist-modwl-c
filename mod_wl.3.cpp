@@ -1,13 +1,12 @@
-/* 
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- *
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,28 +17,39 @@
 
  /*
  * mod_wl.c
-  
  * Prevents user agent spoofing by reverse / forwarding ips 
  * more information on the procedure found at: 
- * https://modules.apache.org/modules.lua?id=13738
- * https://support.google.com/webmasters/answer/80553?hl=en
  *
+ *    https://support.google.com/webmasters/answer/80553?hl=en
+ *    https://modules.apache.org/modules.lua?id=13738
  *
- * Nadir Hamid <matrix.nad@gmail.com> 16 May 2014
+ * Nadir Hamid <matrix.nad@gmail.com> 16 May 2014 (Last Updated: July 30 2014)
  * Based on mod_spamhaus
  */
 
-#include <stdio. h>
+/* std libraries */
+#include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <regex.h>
 #include <sys/types.h>
+#include <string.h>
+
+/* win32 setup */
+#ifndef __WIN32
+#include <winsock2.h>
+#include <Ws2tcpip.h>
+
+/* linux setup */
+#else
 #include <sys/socket.h>
+#include <regex.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include <string.h>
+#endif
+
+/* apache libraries */
 #include "apr_hash.h"
 #include "ap_config.h"
 #include "ap_provider.h"
@@ -49,29 +59,22 @@
 #include "http_log.h"
 #include "http_protocol.h"
 #include "http_request.h"
+#include "http_config.h"
 #include "apr_tables.h"
-#ifdef __WIN32
-
-#else
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#endif
-
 
 #define WL_MODULE_CORE_PRIVATE 1
 #define WL_MODULE_DEBUG_MODE 1 
 #define WL_MODULE_ACCESS_CONFIG 1 
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_1					"Googlebot/2.1 (+http)"
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_2							  "bingbot/2.1"
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_3						     "Yahoo! Slurp"
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_4					  			   "Yandex"
-#define WL_MODULE_GOOGLEBOT_CAPTION								    "googlebot.com"
-#define WL_MODULE_YAHOOBOT_CAPTION								    "ac2.yahoo.com" 
-#define WL_MODULE_BINGBOT_CAPTION							       "search.msn.com" 
-#define WL_MODULE_YANDEXBOT_CAPTION									   "yandex.com"
+#define WL_MODULE_DEBUG_UNITTEST_AGENT_1								 "Googlebot/2.1"
+#define WL_MODULE_DEBUG_UNITTEST_AGENT_2								   "bingbot/2.1"
+#define WL_MODULE_DEBUG_UNITTEST_AGENT_3								  "Yahoo! Slurp"
+#define WL_MODULE_GOOGLEBOT_CAPTION									     "googlebot.com"
+#define WL_MODULE_YAHOOBOT_CAPTION									     "ac2.yahoo.com" 
+#define WL_MODULE_BINGBOT_CAPTION									    "search.msn.com" 
+#define WL_MODULE_YANDEXBOT_CAPTION									        "yandex.com"
+
+module AP_MODULE_DECLARE_DATA   
+wl_module;
 
 typedef struct {
     char*          wl_dns_forward;
@@ -106,11 +109,8 @@ typedef struct {
     int                  lenabled;
     int                dnstimeout;
     bitem*                   cbot;
-    bitem*                  chead;
+    bitem*		    chead;
 } wl_config;
-
-module AP_MODULE_DECLARE_DATA   
-wl_module;
 
 unsigned char                 wl_bytes[4];
 static int                    wl_init(request_rec* rec);
@@ -133,7 +133,6 @@ static void                   wl_blocked_handler(request_rec* rec, char* handler
 static void                   wl_accepted_handler(request_rec* rec, char* handler);
 static void                   wl_strip_ip(char *addr, char* strip);
 static char*                  wl_replace_ip(char* addr, char* rep, char* with);
-const char*                   apr_table_get(const apr_table_t* t, const char* key);
 static item*                  wl_element;
 static item*                  bl_element;
 inline static int             wl_assert(char* addr, char* constraint);
@@ -198,7 +197,7 @@ static char* wl_reverse_dns(char* addr)
     struct in_addr ipv4addr;
     
     inet_pton(AF_INET, addr, &ipv4addr);
-    he = gethostbyaddr(&ipv4addr, sizeof(ipv4addr), AF_INET);
+    he = gethostbyaddr((char*) &ipv4addr, sizeof(ipv4addr), AF_INET);
     
     return he->h_name;
 }
@@ -256,15 +255,6 @@ inline static int wl_assert(char* addr, char* constraint)
     size_t matches;
 
     for (i = 0; i <= sizeof(wl_valid_domains) / 8; i ++) {
-            rgx_state = regcomp(&rgx, wl_valid_domains[i], REG_EXTENDED);
-
-            if (rgx_state)
-                wl_fail("ERR: WL couldn't compile agaisnt expression");
-
-            rgx_state = regexec(&rgx, addr, 0, NULL, 0);
-
-            if (!rgx_state)
-                matches ++;
     }
 
     if (matches > 1 && !strcasecmp(constraint, "any"))
@@ -278,8 +268,8 @@ inline static int wl_assert(char* addr, char* constraint)
 
 
 /* Verify if the user agent 
- * is one of the required ones 
- * This is used to verify whether
+ * is one of the verified agents 
+ * This is also used to verify whether
  * a user may be spoofing his agent or not.
  * Additionally this should be
  * called before any dns based functions.
@@ -298,16 +288,7 @@ inline static int wl_in_agents(char* agent, wl_config* wl_cfg)
     wl_strip_ip(agent, " ");
 
     while (wl_cfg->cbot != NULL) {
-        rgx_state = regcomp(&rgx, wl_cfg->cbot->name, REG_EXTENDED);
         
-        if (rgx_state)
-            wl_fail("ERR: WL couldn't compile agaisnt expression");
-
-        rgx_state = regexec(&rgx, agent, 0, NULL, 0);
-    
-        if (!rgx_state)
-            found = 1;
-
         wl_cfg->cbot = wl_cfg->cbot->next;
     }
    
@@ -517,7 +498,7 @@ static char* wl_replace_ip(char *addr, char *rep, char *with) {
     for (count = 0; (tmp = strstr(ins, rep)); ++count) 
         ins = tmp + len_rep;
 
-    tmp = result = malloc(strlen(addr) + (len_with - len_rep) * count + 1);
+    tmp = result = (char*) malloc(strlen(addr) + (len_with - len_rep) * count + 1);
 
     if (!result)
         return result;
@@ -550,7 +531,7 @@ static void wl_load_wl(char* fl, request_rec* rec)
 
     wl_st = apr_file_open(&wl_file,
                           fl,
-                          APR_FOPEN_CREATE | APR_FOPEN_READ,
+                          APR_CREATE | APR_READ,
                           APR_OS_DEFAULT,
                           rec->pool);
 
@@ -577,7 +558,7 @@ static void wl_load_bl(char* fl, request_rec* rec)
 
     wl_st = apr_file_open(&wl_file,
                           fl,
-                          APR_FOPEN_CREATE | APR_FOPEN_READ,
+                          APR_CREATE | APR_READ,
                           APR_OS_DEFAULT,
                           rec->pool);
 
@@ -605,7 +586,7 @@ static void wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg)
 
     wl_st = apr_file_open(&wl_file,
                           fl,
-                          APR_FOPEN_CREATE | APR_FOPEN_READ,
+                          APR_CREATE | APR_READ,
                           APR_OS_DEFAULT,
                           rec->pool);
 
@@ -615,7 +596,7 @@ static void wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg)
 
         wl_strip_ip(data, " ");
         wl_strip_ip(data, "\n");
-        bot = wl_xmalloc(sizeof(char) * 256);
+        bot = (char*) wl_xmalloc(sizeof(char) * 256);
 
         strcpy(bot, data);
         wl_append_bot(wl_cfg, bot);
@@ -643,7 +624,7 @@ static char* wl_pluck_agent(char* agent)
  * Don't allow the user agent
  * to view the content.
  * 
- * @param rec -> apache request structure
+ * @param rec -> apache request
  * @param handler -> an anchor to go to
  */
 static void wl_blocked_handler(request_rec* rec, char* handler)
@@ -796,7 +777,7 @@ static int wl_init(request_rec* rec)
         return wl_close(DECLINED);
     }
 
-    agent = wl_xmalloc(sizeof(char) * 256);
+    agent = (char*) wl_xmalloc(sizeof(char) * 256);
     strcpy(agent, (char*) apr_table_get(rec->headers_in, "User-Agent"));
 
     /* first check if the user
@@ -887,7 +868,7 @@ static int wl_close(int status)
 inline static void* wl_server_config(apr_pool_t* pool, char* context)
 {
     context = context ? context : "";
-    wl_config* cfg = apr_pcalloc(pool, sizeof(wl_config));
+    wl_config* cfg = (wl_config*) apr_pcalloc(pool, sizeof(wl_config));
 
     if (cfg) {
         strcpy(cfg->context, context);
@@ -918,7 +899,7 @@ inline static void* wl_server_config(apr_pool_t* pool, char* context)
 inline static void* wl_dir_config(apr_pool_t* pool, char* context)
 {
     context = context ? context : "";
-    wl_config* cfg = apr_pcalloc(pool, sizeof(wl_config));
+    wl_config* cfg = (wl_config*) apr_pcalloc(pool, sizeof(wl_config));
 
     if (cfg) {
         strcpy(cfg->context, context);
@@ -1197,6 +1178,7 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
     if (wl_file_st == APR_SUCCESS) {
             apr_file_puts(addr, wl_file);
             apr_file_close(wl_file);
+
 #if WL_MODULE_DEBUG_MODE
     ap_rprintf(rec, "Whitelist added: %s\n", addr);
 #endif
@@ -1212,43 +1194,59 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
  * either set the configuration for
  * access level configurations or
  * RCRF based configurations not both
+ * -----------------------------------
+ * fix for issue 0001 -- when compiling 
+ * with a C++ compiler cast directives to
+ * cmd_func.
+ *
+ * reference: http://comments.gmane.org/gmane.comp.apache.devel/11858
  */
 #ifdef WL_MODULE_ACCESS_CONFIG
 static const command_rec wl_directives[] = 
 {
-    AP_INIT_TAKE1("wlEnabled", wl_set_enabled, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "ENABLE OR DISABLE WL"),
-    AP_INIT_TAKE1("wlListEnabled", wl_set_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "SET WL's WHITELIST"),
-    AP_INIT_TAKE1("wlList", wl_set_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "SET WL's WHITELIST"),
-    AP_INIT_TAKE1("wlBlackList", wl_set_blist, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "SET WL'S BLACKLIST"),
-    AP_INIT_TAKE1("wlDebug", wl_set_debug, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBlockedHandler", wl_set_blocked_handler, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlAcceptedHandler", wl_set_accepted_handler, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBotAutoAdd", wl_set_bot_auto_add, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlDnsTimeout", wl_set_dns_timeout, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_RAW_ARGS("wlBot", wl_set_bot, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlEnabled", (cmd_func) wl_set_enabled, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "ENABLE OR DISABLE WL"),
+    AP_INIT_TAKE1("wlListEnabled", (cmd_func) wl_set_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "SET WL's WHITELIST"),
+    AP_INIT_TAKE1("wlList", (cmd_func) wl_set_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "SET WL's WHITELIST"),
+    AP_INIT_TAKE1("wlBlackList", (cmd_func) wl_set_blist, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "SET WL'S BLACKLIST"),
+    AP_INIT_TAKE1("wlDebug", (cmd_func) wl_set_debug, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlBlockedHandler", (cmd_func) wl_set_blocked_handler, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlAcceptedHandler", (cmd_func) wl_set_accepted_handler, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlBotList", (cmd_func) wl_set_bot_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlBotAutoAdd", (cmd_func) wl_set_bot_auto_add, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlDnsTimeout", (cmd_func) wl_set_dns_timeout, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_RAW_ARGS("wlBot", (cmd_func) wl_set_bot, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     { NULL }
 };
 #else
 static const command_rec wl_directives[] = 
 {
-    AP_INIT_TAKE1("wlEnabled", wl_set_enabled, NULL, RSRC_CONF, "ENABLE OR DISABLE WL"),
-    AP_INIT_TAKE1("wlListEnabled", wl_set_list, NULL, ACCESS_CONF, "SET WL's WHITELIST"),
-    AP_INIT_TAKE1("wlList", wl_set_list, NULL, RSRC_CONF, "SET WL's WHITELIST"),
-    AP_INIT_TAKE1("wlBlackList", wl_set_blist, NULL, RSRC_CONF, "SET WL'S BLACKLIST"),
-    AP_INIT_TAKE1("wlDebug", wl_set_debug, NULL, RSRC_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBlockedHandler", wl_set_blocked_handler, NULL, RSRC_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlAcceptedHandler", wl_set_accepted_handler, NULL, RSRC_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBotAutoAdd", wl_set_bot_auto_add, NULL, RSRC_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlDnsTimeout", wl_set_dns_timeout, NULL, ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_RAW_ARGS("wlBot", wl_set_bot, NULL, RSRC_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlEnabled", (cmd_func) wl_set_enabled, NULL, RSRC_CONF, "ENABLE OR DISABLE WL"),
+    AP_INIT_TAKE1("wlListEnabled", (cmd_func) wl_set_list, NULL, ACCESS_CONF, "SET WL's WHITELIST"),
+    AP_INIT_TAKE1("wlList", (cmd_func) wl_set_list, NULL, RSRC_CONF, "SET WL's WHITELIST"),
+    AP_INIT_TAKE1("wlBlackList", (cmd_func) wl_set_blist, NULL, RSRC_CONF, "SET WL'S BLACKLIST"),
+    AP_INIT_TAKE1("wlDebug", (cmd_func) wl_set_debug, NULL, RSRC_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlBlockedHandler", (cmd_func) wl_set_blocked_handler, NULL, RSRC_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlAcceptedHandler", (cmd_func) wl_set_accepted_handler, NULL, RSRC_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlBotList", (cmd_func) wl_set_bot_list, NULL, RSRC_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlBotAutoAdd", (cmd_func) wl_set_bot_auto_add, NULL, RSRC_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlDnsTimeout", (cmd_func) wl_set_dns_timeout, NULL, ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_RAW_ARGS("wlBot", (cmd_func) wl_set_bot, NULL, RSRC_CONF, "DEBUG MODE"),
     { NULL }
 };
 #endif
 
-/* module definitions
- */
+#ifdef __cplusplus
+extern module AP_MODULE_DECLARE_DATA   wl_module =
+{ 
+    STANDARD20_MODULE_STUFF,
+    wl_dir_config,          /* Per-directory configuration handler */
+    NULL,                   /* Merge handler for per-directory configurations */
+    NULL,                   /* Per-server configuration handler */
+    NULL,                   /* Merge handler for per-server configurations */
+    wl_directives,          /* Any directives we may have for httpd */
+    wl_hooks                /* Our hook registering function */
+};
+#else
 module AP_MODULE_DECLARE_DATA   wl_module =
 { 
     STANDARD20_MODULE_STUFF,
@@ -1259,3 +1257,4 @@ module AP_MODULE_DECLARE_DATA   wl_module =
     wl_directives,          /* Any directives we may have for httpd */
     wl_hooks                /* Our hook registering function */
 };
+#endif
