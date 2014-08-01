@@ -105,6 +105,7 @@ typedef struct {
     int                     debug;
     int                  lenabled;
     int                dnstimeout;
+    int			  interop;
     bitem*                   cbot;
     bitem*                  chead;
 } wl_config;
@@ -1060,6 +1061,29 @@ const char* wl_set_dns_timeout(cmd_parms* cmd, void* cfg, const char* arg)
     return NULL;
 }
 
+/* Set whether to allow interop or not
+ * this will upstream all requests to 
+ * higher level resources. Definitions for 
+ * the interop can be found @ http://
+ *
+ * @param cmd -> configuration inherit from httpd.conf
+ * @param cfg -> configuration structure
+ * @param arg -> config set value
+ */
+const char* wl_set_interop(cmd_parms* cmd, void* cfg, const char* arg)
+{
+    wl_config* wl_cfg = (wl_config*) cfg;
+
+    if (!strcasecmp(arg, "on"))
+            wl_cfg->interop = 1;
+    else
+            wl_cfg->interop = 0;
+
+    return NULL;
+}
+
+
+
 /* Set a bot wl module can automatically
  * use.
  *
@@ -1226,6 +1250,7 @@ static const command_rec wl_directives[] =
     AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlBotAutoAdd", wl_set_bot_auto_add, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlDnsTimeout", wl_set_dns_timeout, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlInterop", wl_set_interop, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     AP_INIT_RAW_ARGS("wlBot", wl_set_bot, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     { NULL }
 };
@@ -1242,6 +1267,7 @@ static const command_rec wl_directives[] =
     AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlBotAutoAdd", wl_set_bot_auto_add, NULL, RSRC_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlDnsTimeout", wl_set_dns_timeout, NULL, ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlInterop", wl_set_interop, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     AP_INIT_RAW_ARGS("wlBot", wl_set_bot, NULL, RSRC_CONF, "DEBUG MODE"),
     { NULL }
 };
