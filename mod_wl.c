@@ -29,16 +29,29 @@
  * Based on mod_spamhaus
  */
 
+/* std libraries */
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <regex.h>
+#include <string.h>
+
+/* windows setup */
+#if def WIN32
+#include <winsock2.h>
+#include <Ws2tcpip.h>
+
+/* linux setup */
+#else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#endif
+
+/* apache libraries */
 #include <string.h>
 #include "apr_hash.h"
 #include "ap_config.h"
@@ -51,15 +64,6 @@
 #include "http_request.h"
 #include "apr_tables.h"
 #include "apr_strings.h"
-#ifdef __WIN32
-
-#else
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#endif
 
 
 #define WL_MODULE_CORE_PRIVATE 1
