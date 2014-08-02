@@ -77,6 +77,8 @@
 #define WL_MODULE_YAHOOBOT_CAPTION					        "ac2.yahoo.com" 
 #define WL_MODULE_BINGBOT_CAPTION					       "search.msn.com" 
 #define WL_MODULE_YANDEXBOT_CAPTION						   "yandex.com"
+#define WL_MODULE_STATUS_OKMSG						 	      "Success"
+#define WL_MODULE_STATUS_FAILMSG							 "Fail"
 
 typedef struct {
     char*          wl_dns_forward;
@@ -162,6 +164,7 @@ const char*                   wl_set_list(cmd_parms* cmd, void* cfg, const char*
 const char*                   wl_set_blist(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_bot_auto_add(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_dns_timeout(cmd_parms* cmd, void* cfg, const char* arg);
+const char*		      wl_concat(char* ip1, char* ip2);
 static char*                  wl_pluck_agent(char* agent);
 static const char*            wl_valid_domains[] = { WL_MODULE_GOOGLEBOT_CAPTION, WL_MODULE_YAHOOBOT_CAPTION, WL_MODULE_BINGBOT_CAPTION };
 static int                    wl_wl_loaded = 0;
@@ -440,6 +443,21 @@ static void wl_strip_ip(char *addr, char* strip)
     *q = '\0';
 }
 
+/* Concatenate two ip strings
+ * this is used to set variables
+ * in the setenv_variable collection
+ * @param ip1 -> ip address
+ * @param ip2 -> ip address
+ */
+const char* wl_concat(char* ip1, char* ip2)
+{
+    char *result = malloc(strlen(ip1)+strlen(ip2)+1); //+1 for the zero-terminator
+    strcpy(result, ip1);
+    strcat(result, ip2);
+
+    return result;
+}
+
 /* Depending on the target list
  * we may need to strip any extranatous
  * characters from the ip string.
@@ -554,11 +572,7 @@ static void wl_load_wl(char* fl, request_rec* rec)
     apr_size_t datalen = 256;
     char data[256]; 
 
-    wl_st = apr_file_open(&wl_file,
-                          fl,
-                          APR_FOPEN_CREATE | APR_FOPEN_READ,
-                          APR_OS_DEFAULT,
-                          rec->pool);
+    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, APR_OS_DEFAULT, rec->pool);
 
     while (apr_file_gets(data, datalen, wl_file) == APR_SUCCESS) 
         wl_strip_append_wl(data);
@@ -581,11 +595,7 @@ static void wl_load_bl(char* fl, request_rec* rec)
     apr_size_t datalen = 256;
     char data[256]; 
 
-    wl_st = apr_file_open(&wl_file,
-                          fl,
-                          APR_FOPEN_CREATE | APR_FOPEN_READ,
-                          APR_OS_DEFAULT,
-                          rec->pool);
+    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, APR_OS_DEFAULT, rec->pool);
 
     while (apr_file_gets(data, datalen, wl_file) == APR_SUCCESS)
         wl_strip_append_bl(data);
@@ -609,11 +619,7 @@ static void wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg)
     char data[256]; 
     char* bot;
 
-    wl_st = apr_file_open(&wl_file,
-                          fl,
-                          APR_FOPEN_CREATE | APR_FOPEN_READ,
-                          APR_OS_DEFAULT,
-                          rec->pool);
+    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, APR_OS_DEFAULT, rec->pool);
 
     while (apr_file_gets(data, datalen, wl_file) == APR_SUCCESS) {
         if (!strcasecmp(data, ""))
@@ -723,16 +729,15 @@ static int wl_init(request_rec* rec)
     char* addr;
     char* initial;
     char* agent;
+    size_t bt_cnt;
 
     /* first check the confguration
      */
     wl_config* wl_cfg = (wl_config*) 
     ap_get_module_config(rec->per_dir_config, &wl_module);
-
-    /*
-    wl_config* wl_cfg = (wl_config*)
-    ap_get_module_config(rec->server->module_config, &wl_module);
-    */
+     
+    if (wl_cfg->interop == 1)
+	apr_table_set(rec->subprocess_env, "MODWL_BOTS", wl_cfg->bot);
 
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
@@ -780,10 +785,13 @@ static int wl_init(request_rec* rec)
         ap_rprintf(rec, "Original remote ip is: %s\n", addr);
 
 
+    bt_cnt = 0;
+
     while (wl_cfg->cbot != NULL) {
         ap_rprintf(rec, "Initialized bot: %s\n", wl_cfg->cbot->name);
-
+	
         wl_cfg->cbot = wl_cfg->cbot->next;
+	bt_cnt ++;
     }
 
     wl_cfg->cbot = wl_cfg->chead;
@@ -794,6 +802,8 @@ static int wl_init(request_rec* rec)
      */
     if (wl_in_wl(initial)) {
         wl_accepted_handler(rec, wl_cfg->ahandler);
+
+	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
         return wl_close(OK);
     }
 
@@ -803,6 +813,8 @@ static int wl_init(request_rec* rec)
      */
     if (wl_in_bl(initial)) {
         wl_blocked_handler(rec, wl_cfg->bhandler);
+
+	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_FAILMSG);
         return wl_close(DECLINED);
     }
 
@@ -825,7 +837,19 @@ static int wl_init(request_rec* rec)
         if (wl_cfg->debug == 1)
            ap_rprintf(rec, "Agent: %s did not match any needed user agents", agent);
 #endif
-        return wl_close(OK); 
+	addr = wl_reverse_dns(addr);
+
+    	if (wl_cfg->interop == 1)
+		apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
+
+	addr = wl_forward_dns(addr);
+
+	if (wl_cfg->interop == 1)
+		apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
+
+	if (wl_cfg->interop == 1)
+		apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
+
     }
 
     addr = wl_reverse_dns(addr);
@@ -859,14 +883,14 @@ static int wl_init(request_rec* rec)
      * initial and address before
      * trying to use strcmp
      */
-    wl_strip_ip(addr, " ");
+    //wl_strip_ip(addr, " ");
 
     if (!strcasecmp(initial, addr)) {
         // add to white list
         wl_append_wl(initial);
         wl_append_list(wl_cfg->list, initial, rec);
         wl_accepted_handler(rec, wl_cfg->ahandler);
-	//apr_table_set(rec->subprocess_env, "MODWL_STATUS", "Accepted");
+	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
 
         return wl_close(OK);
     } else {
@@ -876,7 +900,7 @@ static int wl_init(request_rec* rec)
         wl_append_bl(initial);
         wl_append_list(wl_cfg->blist, initial, rec);
         wl_blocked_handler(rec, wl_cfg->bhandler);
-	//apr_table_set(rec->subprocess_env, "MODWL_STATUS", "Declined");
+	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_FAILMSG);
     }
    
 
