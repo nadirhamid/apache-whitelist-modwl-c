@@ -866,7 +866,7 @@ static int wl_init(request_rec* rec)
         wl_append_wl(initial);
         wl_append_list(wl_cfg->list, initial, rec);
         wl_accepted_handler(rec, wl_cfg->ahandler);
-	apr_table_set(rec->subprocess_env, "MODWL_STATUS", "Accepted");
+	//apr_table_set(rec->subprocess_env, "MODWL_STATUS", "Accepted");
 
         return wl_close(OK);
     } else {
@@ -876,7 +876,7 @@ static int wl_init(request_rec* rec)
         wl_append_bl(initial);
         wl_append_list(wl_cfg->blist, initial, rec);
         wl_blocked_handler(rec, wl_cfg->bhandler);
-	apr_table_set(rec->subprocess_env, "MODWL_STATUS", "Declined");
+	//apr_table_set(rec->subprocess_env, "MODWL_STATUS", "Declined");
     }
    
 
@@ -1206,7 +1206,7 @@ const char* wl_set_accepted_handler(cmd_parms* cmd, void* cfg, const char* arg)
  */
 static void wl_hooks(apr_pool_t* pool)
 {
-    ap_hook_handler(wl_init, NULL, NULL, APR_HOOK_MIDDLE); // middle was present in initial version. 
+    ap_hook_post_read_request(wl_init, NULL, NULL, APR_HOOK_MIDDLE); // middle was present in initial version. 
 }
 
 
