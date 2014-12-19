@@ -572,7 +572,10 @@ static void wl_load_wl(char* fl, request_rec* rec)
     apr_size_t datalen = 256;
     char data[256]; 
 
-    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, APR_OS_DEFAULT, rec->pool);
+    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, 0, rec->pool);
+    // Can't use file..
+    if (!(wl_st == APR_SUCCESS))
+	return;
 
     while (apr_file_gets(data, datalen, wl_file) == APR_SUCCESS) 
         wl_strip_append_wl(data);
@@ -595,7 +598,10 @@ static void wl_load_bl(char* fl, request_rec* rec)
     apr_size_t datalen = 256;
     char data[256]; 
 
-    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, APR_OS_DEFAULT, rec->pool);
+    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, 0, rec->pool);
+    // Can't use file..
+    if (!(wl_st == APR_SUCCESS))
+	return;
 
     while (apr_file_gets(data, datalen, wl_file) == APR_SUCCESS)
         wl_strip_append_bl(data);
@@ -616,10 +622,14 @@ static void wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg)
     apr_file_t* wl_file;
     apr_status_t wl_st;
     apr_size_t datalen = 256;
-    char data[256]; 
+    char* data; 
     char* bot;
 
-    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, APR_OS_DEFAULT, rec->pool);
+    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, 0, rec->pool);
+
+    // Can't use file..
+    if (!(wl_st == APR_SUCCESS))
+	return;
 
     while (apr_file_gets(data, datalen, wl_file) == APR_SUCCESS) {
         if (!strcasecmp(data, ""))
@@ -627,6 +637,7 @@ static void wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg)
 
         wl_strip_ip(data, " ");
         wl_strip_ip(data, "\n");
+
         bot = wl_xmalloc(sizeof(char) * 256);
 
         strcpy(bot, data);
@@ -758,7 +769,6 @@ static int wl_init(request_rec* rec)
     /* Load the whitelist
      * into memory
      */
-
     if (strcasecmp(wl_cfg->list, ""))
         if (wl_wl_loaded != 1)
             wl_load_wl(wl_cfg->list, rec);
@@ -1263,16 +1273,22 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 				       APR_CREATE |   // allow file creation 
 				       APR_WRITE |    // move to end of file on open
 				       APR_APPEND,    // only append to this file 
-				       APR_OS_DEFAULT,
+				       APR_REG,
 				       rec->pool);
 	       
+
+            if (!(wl_file_st == APR_SUCCESS))
+		return;
+
 	    wl_file_st = apr_file_lock(wl_file, 
 				       APR_FLOCK_EXCLUSIVE | 
 				       APR_FLOCK_NONBLOCK);
 
+
 	    if (wl_file_st == APR_SUCCESS) {
 		    apr_file_puts(addr, wl_file);
 		    apr_file_close(wl_file);
+
 #if WL_MODULE_DEBUG_MODE
 	    ap_rprintf(rec, "Whitelist added: %s\n", addr);
 #endif
