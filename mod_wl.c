@@ -733,11 +733,14 @@ static int wl_init(request_rec* rec)
 
     /* first check the confguration
      */
+
     wl_config* wl_cfg = (wl_config*) 
     ap_get_module_config(rec->per_dir_config, &wl_module);
      
+
     if (wl_cfg->interop == 1)
 	apr_table_set(rec->subprocess_env, "MODWL_BOTS", wl_cfg->bot);
+
 
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
@@ -889,9 +892,10 @@ static int wl_init(request_rec* rec)
      * trying to use strcmp
      */
     //wl_strip_ip(addr, " ");
-
+  
     if (!strcasecmp(initial, addr)) {
         // add to white list
+
         wl_append_wl(initial);
         wl_append_list(wl_cfg->list, initial, rec);
         wl_accepted_handler(rec, wl_cfg->ahandler);
@@ -908,7 +912,6 @@ static int wl_init(request_rec* rec)
 	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_FAILMSG);
     }
    
-
     return wl_close(DECLINED);
 }
 
@@ -1252,30 +1255,36 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
     apr_file_t* wl_file;
     apr_status_t wl_file_st;
 
-    wl_file_st = apr_file_open(&wl_file, 
-                               fl,
-                               APR_BUFFERED | // set buffered 
-                               APR_BINARY |   // ignored in unix env 
-                               APR_CREATE |   // allow file creation 
-                               APR_WRITE |    // move to end of file on open
-                               APR_APPEND,    // only append to this file 
-                               APR_OS_DEFAULT,
-                               rec->pool);
-       
-    wl_file_st = apr_file_lock(wl_file, 
-                               APR_FLOCK_EXCLUSIVE | 
-                               APR_FLOCK_NONBLOCK);
+    if (strcasecmp(fl, "")) {
+	    wl_file_st = apr_file_open(&wl_file, 
+				       fl,
+				       APR_BUFFERED | // set buffered 
+				       APR_BINARY |   // ignored in unix env 
+				       APR_CREATE |   // allow file creation 
+				       APR_WRITE |    // move to end of file on open
+				       APR_APPEND,    // only append to this file 
+				       APR_OS_DEFAULT,
+				       rec->pool);
+	       
+	    wl_file_st = apr_file_lock(wl_file, 
+				       APR_FLOCK_EXCLUSIVE | 
+				       APR_FLOCK_NONBLOCK);
 
-    if (wl_file_st == APR_SUCCESS) {
-            apr_file_puts(addr, wl_file);
-            apr_file_close(wl_file);
+	    if (wl_file_st == APR_SUCCESS) {
+		    apr_file_puts(addr, wl_file);
+		    apr_file_close(wl_file);
 #if WL_MODULE_DEBUG_MODE
-    ap_rprintf(rec, "Whitelist added: %s\n", addr);
+	    ap_rprintf(rec, "Whitelist added: %s\n", addr);
 #endif
-            return;
+		    return;
+	    } else {
+#if WL_MODULE_DEBUG_MODE
+	    ap_rprintf(rec, "Whitelist couldn't add: %s, (status err): %d\n", addr, wl_file_st);
+#endif
+	    }
     } else {
 #if WL_MODULE_DEBUG_MODE
-    ap_rprintf(rec, "Whitelist couldn't add: %s, (status err): %d\n", addr, wl_file_st);
+	    ap_rprintf(rec, "Whitelist couldn't add: %s", addr);
 #endif
     }
 }
