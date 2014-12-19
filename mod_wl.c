@@ -775,7 +775,7 @@ static int wl_init(request_rec* rec)
         if (wl_bots_loaded != 1)
             wl_load_bots(wl_cfg->btlist, rec, wl_cfg);
 
-#if AP_SERVER_MAJORVERSION_NUMBER >= 2 && AP_SERVER_MINOR_VERSION >= 4
+#if AP_SERVER_MAJORVERSION_NUMBER >= 2 && AP_SERVER_MINORVERSION_NUMBER >= 4*/
     addr = initial = rec->connection->client_ip;
 #else
     addr = initial = rec->connection->remote_ip;
