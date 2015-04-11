@@ -68,7 +68,7 @@
 
 #define WL_MODULE_CORE_PRIVATE 1
 #define WL_MODULE_DEBUG_MODE 1 
-#define WL_MODULE_ACCESS_CONFIG 1 
+#define WL_MODULE_ACCESS_CONFIG 0 
 #define WL_MODULE_DEBUG_UNITTEST_AGENT_1				"Googlebot/2.1 (+http)"
 #define WL_MODULE_DEBUG_UNITTEST_AGENT_2					  "bingbot/2.1"
 #define WL_MODULE_DEBUG_UNITTEST_AGENT_3		 		         "Yahoo! Slurp"
@@ -735,7 +735,7 @@ static void wl_show_variables(wl_config* wl_cfg, request_rec* rec)
 static int wl_init(request_rec* rec)
 {
     /* First we need to reverse dns the
-     * addr.
+     _s* addr.
      */
     char* addr;
     char* initial;
@@ -745,17 +745,17 @@ static int wl_init(request_rec* rec)
     /* first check the confguration
      */
 
-    wl_config* wl_cfg = (wl_config*) 
-    ap_get_module_config(rec->per_dir_config, &wl_module);
-     
-
-    if (wl_cfg->interop == 1)
-	apr_table_set(rec->subprocess_env, "MODWL_BOTS", wl_cfg->bot);
+    wl_config* wl_cfg = (wl_config*) ap_get_module_config(rec->per_dir_config, &wl_module);
+        
+    if (wl_cfg->interop == 1) {
+	    //apr_table_set(rec->subprocess_env, "MODWL_BOTS", wl_cfg->bot);
+    }
 
 
 #if WL_MODULE_DEBUG_MODE
-    if (wl_cfg->debug == 1)
+    if (wl_cfg->debug == 1) {
         wl_show_variables(wl_cfg, rec);
+    }
 #endif
 
      /* Check if the configuration
@@ -1353,7 +1353,7 @@ module AP_MODULE_DECLARE_DATA   wl_module =
     STANDARD20_MODULE_STUFF,
     wl_dir_config,          /* Per-directory configuration handler */
     NULL,                   /* Merge handler for per-directory configurations */
-    NULL,                   /* Per-server configuration handler */
+    wl_dir_config,                   /* Per-server configuration handler */
     NULL,                   /* Merge handler for per-server configurations */
     wl_directives,          /* Any directives we may have for httpd */
     wl_hooks                /* Our hook registering function */
