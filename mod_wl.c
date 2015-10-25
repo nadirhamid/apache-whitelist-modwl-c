@@ -67,7 +67,6 @@
 
 
 #define WL_MODULE_CORE_PRIVATE 1
-#define WL_MODULE_DEBUG_MODE 1 
 #define WL_MODULE_ACCESS_CONFIG 0 
 #define WL_MODULE_DEBUG_UNITTEST_AGENT_1				"Googlebot/2.1 (+http)"
 #define WL_MODULE_DEBUG_UNITTEST_AGENT_2					  "bingbot/2.1"
@@ -1290,17 +1289,23 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 		    apr_file_close(wl_file);
 
 #if WL_MODULE_DEBUG_MODE
+      if (wl_cfg->debug) {
 	    ap_rprintf(rec, "Whitelist added: %s\n", addr);
+      }
 #endif
 		    return;
 	    } else {
 #if WL_MODULE_DEBUG_MODE
+      if (wl_cfg->debug) {
 	    ap_rprintf(rec, "Whitelist couldn't add: %s, (status err): %d\n", addr, wl_file_st);
+      }
 #endif
 	    }
     } else {
 #if WL_MODULE_DEBUG_MODE
+     if (wl_cfg->debug) {
 	    ap_rprintf(rec, "Whitelist couldn't add: %s", addr);
+    }
 #endif
     }
 }
