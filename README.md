@@ -24,9 +24,6 @@ Compiling
 Setting up a whitelist and blacklist
 ------------------------------------
 
-To keep a reference of "good" and "bad" useragents -- useful
-for performace.
-
 	<Directory "/">
 		WLEnabled On
 		WLDebug On
@@ -36,7 +33,7 @@ for performace.
 	</Directory>
 
 Now "/mod_wl.wl" will store are safe ip address and "mod_wl.bl" will
-keep the bad ones. 
+keep the blacklisted addresses.
 
 
 Handling "spoofs"
