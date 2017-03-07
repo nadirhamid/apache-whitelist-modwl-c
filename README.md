@@ -34,7 +34,6 @@ Blocked Handlers
 
 	<Directory "/">
 		WLEnabled On
-		WLDebug On
 		WLBot ""
 		WLBlockedHandler "./blocked/why.html"
 	</Directory>
@@ -44,16 +43,14 @@ Any user agent
 
 	<Directory "/">
 		WLEnabled On
-		WLDebug On
 		WLBot "any"
-		WLAutoAdd On
 	</Directory>
 
 Matching browsers
 ------------------
 
 	<Directory "/">
-		WLEnable On
+		WLEnablde On
 		WLBot "Mozilla5.0 | WebKit1.0 | Safari"
 	</Directory>
 
