@@ -45,9 +45,6 @@ Here's an example of handling one
 
 This will simply point any blocked user agent to "./blocked/why.html".
 
-We can also do the same thing with whitelists as follows:
-WLAcceptedHandler "./"
-
 Any user agent
 -----------------
 
@@ -55,13 +52,8 @@ Any user agent
 		WLEnabled On
 		WLDebug On
 		WLBot "any"
-		WLBotList "/mod_wl.bots"
 		WLAutoAdd On
 	</Directory>
-
-This will watch any user agent and on a successful
-request, add to the bot list. 
-
 
 Matching browsers
 ------------------
@@ -82,7 +74,6 @@ Using mod_wl with PHP, Python, etc.
 		WLEnabled On
 		WLDebug On
 		WLForward On
-		WLBotList "/mod_wl.bots"
 	</Directory>
 
 This tells the module we want to upstream all
