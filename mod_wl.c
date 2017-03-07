@@ -822,27 +822,6 @@ static int wl_init(request_rec* rec)
     wl_cfg->cbot = wl_cfg->chead;
 #endif
 
-    /* remote ip is in the whitelist
-     * we don't need to do anything else
-     */
-    if (wl_in_wl(initial)) {
-        wl_accepted_handler(rec, wl_cfg->ahandler);
-
-	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
-        return wl_close(OK);
-    }
-
-    /* Decline this request
-     * if the ip is in the 
-     * blacklist
-     */
-    if (wl_in_bl(initial)) {
-        wl_blocked_handler(rec, wl_cfg->bhandler);
-
-	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_FAILMSG);
-        return wl_close(DECLINED);
-    }
-
     agent = wl_xmalloc(sizeof(char) * 256);
     strcpy(agent, (char*) apr_table_get(rec->headers_in, "User-Agent"));
 
@@ -857,25 +836,22 @@ static int wl_init(request_rec* rec)
         AP_LOG_INFO(rec,  "User agent is: %s", agent);
 #endif
     
-    if (wl_in_agents(agent, wl_cfg) != 1) {
 #if WL_MODULE_DEBUG_MODE
-        if (wl_cfg->debug == 1)
-           AP_LOG_INFO(rec, "Agent: %s did not match any needed user agents", agent);
+     if (wl_cfg->debug == 1)
+        AP_LOG_INFO(rec, "Agent: %s did not match any needed user agents", agent);
 #endif
-	addr = wl_reverse_dns(addr);
+     addr = wl_reverse_dns(addr);
 
-    	if (wl_cfg->forward == 1)
-		apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
+     if (wl_cfg->forward == 1)
+  	apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
 
-	addr = wl_forward_dns(addr);
+     addr = wl_forward_dns(addr);
 
-	if (wl_cfg->forward == 1)
-		apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
+     if (wl_cfg->forward == 1)
+	apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
 
-	if (wl_cfg->forward == 1)
-		apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
-
-    }
+     if (wl_cfg->forward == 1)
+  	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
 
     addr = wl_reverse_dns(addr);
 
