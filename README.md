@@ -21,30 +21,8 @@ Compiling
 
 ------------------------------------
 
-Starting off
------------------------------------
-
-After you've compiled the module, open up httpd.conf
-and type in:
-
-	LoadModule wl_module modules/mod_wl.so
-	WLEnabled On
-	WLDebug On
-	WLBot "Googlebot/2.1 | bingbot/2.1"
-
-And then point your browser to
-{your_machines_ip}/any_static_file.html
-
-your Apache error_log should contain
-
-	WLEnabled: 1
-	WLDebug: 1
-	Initialized bot: Googlebot/2.1
-	User Agent: {user_agent_string}
-	Request landed in whitelist
-
 Setting up a whitelist and blacklist
-------------------------
+------------------------------------
 
 To keep a reference of "good" and "bad" useragents -- useful
 for performace.
@@ -61,7 +39,7 @@ Now "/mod_wl.wl" will store are safe ip address and "mod_wl.bl" will
 keep the bad ones. 
 
 
-Handling bad agents
+Handling "spoofs"
 ---------------------
 
 Sometimes we may want to do something with unwanted user agents. 
