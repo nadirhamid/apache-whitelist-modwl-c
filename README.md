@@ -5,6 +5,7 @@ This module blocks "unauthentic" HTTP requests by doing
 a Forward/Reverse DNS lookup.
 
 More information here:
+
 https://support.google.com/webmasters/answer/80553?hl=en
 https://modules.apache.org/modules.lua?id=13738
 
