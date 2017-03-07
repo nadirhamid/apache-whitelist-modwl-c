@@ -148,7 +148,7 @@ inline static void            wl_strip_append_bot(char* bot, wl_config* wl_cfg);
 inline static int             wl_in_agents(char* agent, wl_config* wl_cfg);
 inline static void            wl_append_bot(wl_config* wl_cfg, char* bot);
 inline static void            wl_show_variables(wl_config* wl_cfg, request_rec* rec);
-inline static void*           wl_server_config(apr_pool_t* pool, char* context);
+inline static void*           wl_server_config(apr_pool_t* pool, server_rec* s);
 inline static void*           wl_dir_config(apr_pool_t* pool, char* context);
 inline static void            wl_append_block(char* addr, request_rec* rec);
 inline static void            wl_append_accept(char* addr, request_rec* rec);
@@ -945,13 +945,11 @@ static int wl_close(int status)
  * @param pool -> apache's memory pool or HTTPd in this case
  * @param context -> wl config's context
  */
-inline static void* wl_server_config(apr_pool_t* pool, char* context)
+inline static void* wl_server_config(apr_pool_t* pool, server_rec* s)
 {
-    context = context ? context : "";
     wl_config* cfg = apr_pcalloc(pool, sizeof(wl_config));
 
     if (cfg) {
-        strcpy(cfg->context, context);
         cfg->enabled = 0;
         cfg->lenabled = 0;
         cfg->debug = 0;
@@ -997,9 +995,8 @@ inline static void* wl_dir_config(apr_pool_t* pool, char* context)
         cfg->cbot = NULL;
     }
 
-    return cfg;
+    return cfg; 
 }
-
 
 /* Directives for when
  * wl module is enabled
@@ -1358,7 +1355,7 @@ module AP_MODULE_DECLARE_DATA   wl_module =
     STANDARD20_MODULE_STUFF,
     wl_dir_config,          /* Per-directory configuration handler */
     NULL,                   /* Merge handler for per-directory configurations */
-    wl_dir_config,                   /* Per-server configuration handler */
+    wl_server_config,                   /* Per-server configuration handler */
     NULL,                   /* Merge handler for per-server configurations */
     wl_directives,          /* Any directives we may have for httpd */
     wl_hooks                /* Our hook registering function */
