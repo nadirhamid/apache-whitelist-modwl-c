@@ -21,19 +21,13 @@ Compiling
 
 ------------------------------------
 
-Setting up a whitelist and blacklist
+Verifiying Incoming User-Agents
 ------------------------------------
 
 	<Directory "/">
 		WLEnabled On
 		WLDebug On
-		WLBot "Googlebot/2.1 | Yahoo! Slurp | bingbot/2.1 | Yandexbot/2.1"
-		WLList "/mod_wl.wl"
-		WLBlacklist "/mod_wl.bl"
 	</Directory>
-
-Now "/mod_wl.wl" will store are safe ip address and "mod_wl.bl" will
-keep the blacklisted addresses.
 
 
 Handling "spoofs"
