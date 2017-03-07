@@ -1,9 +1,8 @@
 Apache White List Module
 ===================================================
 
-This module will perform reverse and forward lookups on an incoming ip.
-Afterwards it can perform the needed action based on your config. this is useful for preventing unwanted user agents from accessing a 
-website. 
+This module blocks "unauthentic" HTTP requests by doing
+a Forward/Reverse DNS lookup.
 
 More information here:
 https://support.google.com/webmasters/answer/80553?hl=en
@@ -30,7 +29,7 @@ Verifiying Incoming User-Agents
 	</Directory>
 
 
-Blocked "Handlers"
+Blocked Handlers
 ---------------------
 
 	<Directory "/">
@@ -39,8 +38,6 @@ Blocked "Handlers"
 		WLBot ""
 		WLBlockedHandler "./blocked/why.html"
 	</Directory>
-
-This will simply point any blocked user agent to "./blocked/why.html".
 
 Any user agent
 -----------------
@@ -59,9 +56,6 @@ Matching browsers
 		WLEnable On
 		WLBot "Mozilla5.0 | WebKit1.0 | Safari"
 	</Directory>
-
-No different from matching any search engine
-bot.
 
 
 Using mod_wl with PHP, Python, etc.
@@ -87,12 +81,6 @@ echo "Status: " . $_SERVER{'MODWL_STATUS'};
 More Examples
 ------------------
 You can find more examples in ./tests. 
-
-
-Contributing
------------------
-Have a suggestion or want to add code to the 
-project? I'm always ears on pro buno, give me a shout
-@ matrix.nad@gmail.com   
+ 
 
 More coming soon..
