@@ -1,5 +1,7 @@
  Prerequisites
 *.d
+.libs/*
+.libs
 
 # Object files
 *.o
@@ -21,6 +23,7 @@
 *.a
 *.la
 *.lo
+*.slo
 
 # Shared objects (inc. Windows DLLs)
 *.dll
