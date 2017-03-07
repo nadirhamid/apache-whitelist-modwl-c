@@ -30,11 +30,8 @@ Verifiying Incoming User-Agents
 	</Directory>
 
 
-Handling "spoofs"
+Blocked "Handlers"
 ---------------------
-
-Sometimes we may want to do something with unwanted user agents. 
-Here's an example of handling one 
 
 	<Directory "/">
 		WLEnabled On
@@ -75,9 +72,6 @@ Using mod_wl with PHP, Python, etc.
 		WLDebug On
 		WLForward On
 	</Directory>
-
-This tells the module we want to upstream all
-requests to a higher level language.
 
 Some PHP code to put it together
 ```
