@@ -6,8 +6,6 @@ a Forward/Reverse DNS lookup.
 
 More information here:
 https://support.google.com/webmasters/answer/80553?hl=en
-
-An overview can also be found at:
 https://modules.apache.org/modules.lua?id=13738
 
 
