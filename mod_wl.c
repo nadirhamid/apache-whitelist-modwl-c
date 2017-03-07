@@ -68,6 +68,7 @@
 
 #define WL_MODULE_CORE_PRIVATE 1
 #define WL_MODULE_ACCESS_CONFIG 0 
+#define WL_MODULE_DEBUG_MODE 1
 #define WL_MODULE_DEBUG_UNITTEST_AGENT_1				"Googlebot/2.1 (+http)"
 #define WL_MODULE_DEBUG_UNITTEST_AGENT_2					  "bingbot/2.1"
 #define WL_MODULE_DEBUG_UNITTEST_AGENT_3		 		         "Yahoo! Slurp"
@@ -78,6 +79,11 @@
 #define WL_MODULE_YANDEXBOT_CAPTION						   "yandex.com"
 #define WL_MODULE_STATUS_OKMSG						 	      "Success"
 #define WL_MODULE_STATUS_FAILMSG							 "Fail"
+#define WL_MODULE							 	   "Whitelist Module"
+#define AP_LOG_DEBUG(rec, fmt, ...) ap_log_rerror(APLOG_MARK, APLOG_DEBUG,  0, rec, fmt, ##__VA_ARGS__)
+#define AP_LOG_INFO(rec, fmt, ...)  ap_log_rerror(APLOG_MARK, APLOG_INFO,   0, rec, "[" WL_MODULE "] " fmt, ##__VA_ARGS__)
+#define AP_LOG_WARN(rec, fmt, ...)  ap_log_rerror(APLOG_MARK, APLOG_WARNING,0, rec, "[" WL_MODULE "] " fmt, ##__VA_ARGS__)
+#define AP_LOG_ERR(rec, fmt, ...)   ap_log_rerror(APLOG_MARK, APLOG_ERR,    0, rec, "[" WL_MODULE "] " fmt, ##__VA_ARGS__)
 
 typedef struct {
     char*          wl_dns_forward;
@@ -111,7 +117,7 @@ typedef struct {
     int                     debug;
     int                  lenabled;
     int                dnstimeout;
-    int			  interop;
+    int			  forward;
     bitem*                   cbot;
     bitem*                  chead;
 } wl_config;
@@ -120,6 +126,7 @@ module AP_MODULE_DECLARE_DATA
 wl_module;
 
 unsigned char                 wl_bytes[4];
+static wl_config*   	      wl_cfg;
 static int                    wl_init(request_rec* rec);
 static int                    wl_close(int status);
 static void                   wl_hooks(apr_pool_t* pool);
@@ -680,7 +687,7 @@ static void wl_blocked_handler(request_rec* rec, char* handler)
     }
 
 #if WL_MODULE_DEBUG_MODE
-   ap_rprintf(rec, "Request landed in blacklist");
+   AP_LOG_INFO(rec, "Request landed in blacklist");
 #endif
 }
 
@@ -699,7 +706,7 @@ static void wl_accepted_handler(request_rec* rec, char* handler)
             ap_rputs("</HTML>\n", rec);
     }
 #if WL_MODULE_DEBUG_MODE
-    ap_rprintf(rec, "Request landed in whitelist");
+    AP_LOG_INFO(rec, "Request landed in whitelist");
 #endif
 }
 
@@ -711,19 +718,18 @@ static void wl_accepted_handler(request_rec* rec, char* handler)
  */
 static void wl_show_variables(wl_config* wl_cfg, request_rec* rec)
 {
-    ap_set_content_type(rec, "text/plain");
-    ap_rprintf(rec, "WLEnabled: %d\n", wl_cfg->enabled);
-    ap_rprintf(rec, "WLDebug: %d\n", wl_cfg->debug);
-    ap_rprintf(rec, "WLListEnabled: %d\n", wl_cfg->lenabled);
-    ap_rprintf(rec, "WLBot: %s\n", wl_cfg->bot);
-    ap_rprintf(rec, "WLList: %s\n", wl_cfg->list);
-    ap_rprintf(rec, "WLBlacklist: %s\n", wl_cfg->blist);
-    ap_rprintf(rec, "WLBotlist: %s\n", wl_cfg->btlist);
-    ap_rprintf(rec, "WLBotAutoAdd: %d\n", wl_cfg->btauto);
-    ap_rprintf(rec, "WLDNSTimeout: %d\n", wl_cfg->dnstimeout);
-    ap_rprintf(rec, "WLInterop: %d\n", wl_cfg->interop);
-    ap_rprintf(rec, "WLBlockedHandler: %s\n", wl_cfg->bhandler);
-    ap_rprintf(rec, "WLAcceptedHandler: %s\n", wl_cfg->ahandler);
+    AP_LOG_INFO(rec, "WLEnabled: %d", wl_cfg->enabled);
+    AP_LOG_INFO(rec, "WLDebug: %d", wl_cfg->debug);
+    AP_LOG_INFO(rec, "WLListEnabled: %d", wl_cfg->lenabled);
+    AP_LOG_INFO(rec, "WLBot: %s", wl_cfg->bot);
+    AP_LOG_INFO(rec, "WLList: %s", wl_cfg->list);
+    AP_LOG_INFO(rec, "WLBlacklist: %s", wl_cfg->blist);
+    AP_LOG_INFO(rec, "WLBotlist: %s", wl_cfg->btlist);
+    AP_LOG_INFO(rec, "WLBotAutoAdd: %d", wl_cfg->btauto);
+    AP_LOG_INFO(rec, "WLDNSTimeout: %d", wl_cfg->dnstimeout);
+    AP_LOG_INFO(rec, "WLForward: %d", wl_cfg->forward);
+    AP_LOG_INFO(rec, "WLBlockedHandler: %s", wl_cfg->bhandler);
+    AP_LOG_INFO(rec, "WLAcceptedHandler: %s", wl_cfg->ahandler);
 }
 
 /* Start a wl instance. This
@@ -736,6 +742,9 @@ static int wl_init(request_rec* rec)
     /* First we need to reverse dns the
      _s* addr.
      */
+   char* log_info = "FastCGI Header";
+
+    wl_show_variables(wl_cfg, rec);
     char* addr;
     char* initial;
     char* agent;
@@ -746,11 +755,10 @@ static int wl_init(request_rec* rec)
 
     wl_config* wl_cfg = (wl_config*) ap_get_module_config(rec->per_dir_config, &wl_module);
         
-    if (wl_cfg->interop == 1) {
+    if (wl_cfg->forward == 1) {
 	    //apr_table_set(rec->subprocess_env, "MODWL_BOTS", wl_cfg->bot);
     }
-
-
+  
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1) {
         wl_show_variables(wl_cfg, rec);
@@ -794,18 +802,18 @@ static int wl_init(request_rec* rec)
 #endif
 
 
-    if (wl_cfg->interop == 1)
+    if (wl_cfg->forward == 1)
 	apr_table_set(rec->subprocess_env, "MODWL_ORIGINAL", addr);
 
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
-        ap_rprintf(rec, "Original remote ip is: %s\n", addr);
+        AP_LOG_INFO(rec, "Original remote ip is: %s", addr);
 
 
     bt_cnt = 0;
 
     while (wl_cfg->cbot != NULL) {
-        ap_rprintf(rec, "Initialized bot: %s\n", wl_cfg->cbot->name);
+        AP_LOG_INFO(rec, "Initialized bot: %s", wl_cfg->cbot->name);
 	
         wl_cfg->cbot = wl_cfg->cbot->next;
 	bt_cnt ++;
@@ -846,37 +854,37 @@ static int wl_init(request_rec* rec)
      */
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
-        ap_rprintf(rec,  "User agent is: %s\n", agent);
+        AP_LOG_INFO(rec,  "User agent is: %s", agent);
 #endif
     
     if (wl_in_agents(agent, wl_cfg) != 1) {
 #if WL_MODULE_DEBUG_MODE
         if (wl_cfg->debug == 1)
-           ap_rprintf(rec, "Agent: %s did not match any needed user agents", agent);
+           AP_LOG_INFO(rec, "Agent: %s did not match any needed user agents", agent);
 #endif
 	addr = wl_reverse_dns(addr);
 
-    	if (wl_cfg->interop == 1)
+    	if (wl_cfg->forward == 1)
 		apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
 
 	addr = wl_forward_dns(addr);
 
-	if (wl_cfg->interop == 1)
+	if (wl_cfg->forward == 1)
 		apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
 
-	if (wl_cfg->interop == 1)
+	if (wl_cfg->forward == 1)
 		apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
 
     }
 
     addr = wl_reverse_dns(addr);
 
-    if (wl_cfg->interop == 1)
+    if (wl_cfg->forward == 1)
 	apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
 
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
-        ap_rprintf(rec, "Reverse dns is: %s\n", addr);
+        AP_LOG_INFO(rec, "Reverse dns is: %s", addr);
 #endif
 
     /* if all goes well -- addr is from a good server
@@ -885,12 +893,12 @@ static int wl_init(request_rec* rec)
      */
     addr = wl_forward_dns(addr);
 
-    if (wl_cfg->interop == 1)
+    if (wl_cfg->forward == 1)
 	apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
 
 #if WL_MODULE_DEBUG_MODE
     if (wl_cfg->debug == 1)
-        ap_rprintf(rec, "Converted remote ip is: %s\n", addr);
+        AP_LOG_INFO(rec, "Converted remote ip is: %s", addr);
 #endif 
 
     /* finally we need to check
@@ -963,6 +971,7 @@ inline static void* wl_server_config(apr_pool_t* pool, server_rec* s)
         cfg->ahandler = "";
         cfg->cbot = NULL;
     }
+    wl_cfg = cfg;
 
     return cfg;
 }
@@ -994,6 +1003,7 @@ inline static void* wl_dir_config(apr_pool_t* pool, char* context)
         cfg->ahandler = "";
         cfg->cbot = NULL;
     }
+    wl_cfg = cfg;
 
     return cfg; 
 }
@@ -1118,23 +1128,23 @@ const char* wl_set_dns_timeout(cmd_parms* cmd, void* cfg, const char* arg)
     return NULL;
 }
 
-/* Set whether to allow interop or not
+/* Set whether to allow forwarding or not
  * this will upstream all requests to 
  * higher level resources. Definitions for 
- * the interop can be found @ http://
+ * the forward can be found @ http://
  *
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
  * @param arg -> config set value
  */
-const char* wl_set_interop(cmd_parms* cmd, void* cfg, const char* arg)
+const char* wl_set_forward(cmd_parms* cmd, void* cfg, const char* arg)
 {
     wl_config* wl_cfg = (wl_config*) cfg;
 
     if (!strcasecmp(arg, "on"))
-            wl_cfg->interop = 1;
+            wl_cfg->forward = 1;
     else
-            wl_cfg->interop = 0;
+            wl_cfg->forward = 0;
 
     return NULL;
 }
@@ -1260,6 +1270,7 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 {
     apr_file_t* wl_file;
     apr_status_t wl_file_st;
+    wl_config* wl_cfg = (wl_config*) ap_get_module_config(rec->per_dir_config, &wl_module);
 
     if (strcasecmp(fl, "")) {
 	    wl_file_st = apr_file_open(&wl_file, 
@@ -1287,21 +1298,21 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 
 #if WL_MODULE_DEBUG_MODE
       if (wl_cfg->debug) {
-	    ap_rprintf(rec, "Whitelist added: %s\n", addr);
+	    AP_LOG_INFO(rec, "Whitelist added: %s", addr);
       }
 #endif
 		    return;
 	    } else {
 #if WL_MODULE_DEBUG_MODE
       if (wl_cfg->debug) {
-	    ap_rprintf(rec, "Whitelist couldn't add: %s, (status err): %d\n", addr, wl_file_st);
+	    AP_LOG_INFO(rec, "Whitelist couldn't add: %s, (status err): %d", addr, wl_file_st);
       }
 #endif
 	    }
     } else {
 #if WL_MODULE_DEBUG_MODE
      if (wl_cfg->debug) {
-	    ap_rprintf(rec, "Whitelist couldn't add: %s", addr);
+	    AP_LOG_INFO(rec, "Whitelist couldn't add: %s", addr);
     }
 #endif
     }
@@ -1325,7 +1336,7 @@ static const command_rec wl_directives[] =
     AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlBotAutoAdd", wl_set_bot_auto_add, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlDnsTimeout", wl_set_dns_timeout, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlInterop", wl_set_interop, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlForward", wl_set_forward, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     AP_INIT_RAW_ARGS("wlBot", wl_set_bot, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     { NULL }
 };
@@ -1342,7 +1353,7 @@ static const command_rec wl_directives[] =
     AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlBotAutoAdd", wl_set_bot_auto_add, NULL, RSRC_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlDnsTimeout", wl_set_dns_timeout, NULL, ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlInterop", wl_set_interop, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlForward", wl_set_forward, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     AP_INIT_RAW_ARGS("wlBot", wl_set_bot, NULL, RSRC_CONF, "DEBUG MODE"),
     { NULL }
 };

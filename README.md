@@ -35,7 +35,7 @@ and type in:
 And then point your browser to
 {your_machines_ip}/any_static_file.html
 
-the output should look something like:
+your Apache error_log should contain
 
 	WLEnabled: 1
 	WLDebug: 1
@@ -112,7 +112,7 @@ Using mod_wl with PHP, Python, etc.
 	<Directory "/">
 		WLEnabled On
 		WLDebug On
-		WLInterop On
+		WLForward On
 		WLBotList "/mod_wl.bots"
 	</Directory>
 
