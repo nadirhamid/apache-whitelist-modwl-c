@@ -29,15 +29,6 @@ Verifiying Incoming User-Agents
 	</Directory>
 
 
-Blocked Handlers
----------------------
-
-	<Directory "/">
-		WLEnabled On
-		WLBot ""
-		WLBlockedHandler "./blocked/why.html"
-	</Directory>
-
 Any user agent
 -----------------
 
@@ -50,7 +41,7 @@ Matching browsers
 ------------------
 
 	<Directory "/">
-		WLEnablde On
+		WLEnabled On
 		WLBot "Mozilla5.0 | WebKit1.0 | Safari"
 	</Directory>
 
