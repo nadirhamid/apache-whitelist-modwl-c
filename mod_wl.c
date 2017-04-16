@@ -891,7 +891,6 @@ static int wl_init(request_rec* rec)
 
         wl_append_wl(initial);
         wl_append_list(wl_cfg->list, initial, rec);
-        wl_accepted_handler(rec, wl_cfg->ahandler);
 	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
 
         return wl_close(OK);
@@ -901,7 +900,6 @@ static int wl_init(request_rec* rec)
 
         wl_append_bl(initial);
         wl_append_list(wl_cfg->blist, initial, rec);
-        wl_blocked_handler(rec, wl_cfg->bhandler);
 	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_FAILMSG);
     }
    
