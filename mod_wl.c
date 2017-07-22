@@ -66,19 +66,7 @@
 #include "apr_strings.h"
 
 
-#define WL_MODULE_CORE_PRIVATE 1
-#define WL_MODULE_ACCESS_CONFIG 0 
 #define WL_MODULE_DEBUG_MODE 1
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_1				"Googlebot/2.1 (+http)"
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_2					  "bingbot/2.1"
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_3		 		         "Yahoo! Slurp"
-#define WL_MODULE_DEBUG_UNITTEST_AGENT_4					       "Yandex"
-#define WL_MODULE_GOOGLEBOT_CAPTION					        "googlebot.com"
-#define WL_MODULE_YAHOOBOT_CAPTION					        "ac2.yahoo.com" 
-#define WL_MODULE_BINGBOT_CAPTION					       "search.msn.com" 
-#define WL_MODULE_YANDEXBOT_CAPTION						   "yandex.com"
-#define WL_MODULE_STATUS_OKMSG						 	      "Success"
-#define WL_MODULE_STATUS_FAILMSG							 "Fail"
 #define WL_MODULE							 	   "Whitelist Module"
 #define AP_LOG_DEBUG(rec, fmt, ...) ap_log_rerror(APLOG_MARK, APLOG_DEBUG,  0, rec, fmt, ##__VA_ARGS__)
 #define AP_LOG_INFO(rec, fmt, ...)  ap_log_rerror(APLOG_MARK, APLOG_INFO,   0, rec, "[" WL_MODULE "] " fmt, ##__VA_ARGS__)
@@ -138,33 +126,29 @@ static void                   wl_strip_append_wl(char* addr);
 static void                   wl_strip_append_bl(char* addr);
 static void                   wl_fail(const char* what);
 static void*                  wl_xmalloc(size_t sz);
+static void 		      wl_reset_wl();
 static int                    wl_in_wl(char* addr);
+static void 		      wl_reset_bl();
 static int                    wl_in_bl(char* addr);
 static void                   wl_load_wl(char* fl, request_rec* rec);
 static void                   wl_load_bl(char* fl, request_rec* rec);
+static void 		      wl_reset_bots();
 static void                   wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg);
-static void                   wl_blocked_handler(request_rec* rec, char* handler);
-static void                   wl_accepted_handler(request_rec* rec, char* handler);
 static void                   wl_strip_ip(char *addr, char* strip);
 static char*                  wl_replace_ip(char* addr, char* rep, char* with);
 const char*                   apr_table_get(const apr_table_t* t, const char* key);
 static item*                  wl_element;
 static item*                  bl_element;
-inline static int             wl_assert(char* addr, char* constraint);
 inline static void            wl_strip_append_bot(char* bot, wl_config* wl_cfg);
 inline static int             wl_in_agents(char* agent, wl_config* wl_cfg);
 inline static void            wl_append_bot(wl_config* wl_cfg, char* bot);
 inline static void            wl_show_variables(wl_config* wl_cfg, request_rec* rec);
 inline static void*           wl_server_config(apr_pool_t* pool, server_rec* s);
 inline static void*           wl_dir_config(apr_pool_t* pool, char* context);
-inline static void            wl_append_block(char* addr, request_rec* rec);
-inline static void            wl_append_accept(char* addr, request_rec* rec);
 inline static void            wl_append_list(char* fl, char* addr, request_rec* rec);
 const char*                   wl_set_enabled(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_list_enabled(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_block_handler(cmd_parms* cmd, void* cfg, const char* arg);
-const char*                   wl_set_accept_handler(cmd_parms* cmd, void* cfg, const char* arg);
-const char*                   wl_set_debug(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_bot(cmd_parms* cmd, void* cfg, const char* args);
 const char*                   wl_set_list(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_blist(cmd_parms* cmd, void* cfg, const char* arg);
@@ -172,7 +156,6 @@ const char*                   wl_set_bot_auto_add(cmd_parms* cmd, void* cfg, con
 const char*                   wl_set_dns_timeout(cmd_parms* cmd, void* cfg, const char* arg);
 const char*		      wl_concat(char* ip1, char* ip2);
 static char*                  wl_pluck_agent(char* agent);
-static const char*            wl_valid_domains[] = { WL_MODULE_GOOGLEBOT_CAPTION, WL_MODULE_YAHOOBOT_CAPTION, WL_MODULE_BINGBOT_CAPTION };
 static int                    wl_wl_loaded = 0;
 static int                    wl_bl_loaded = 0;
 static int                    wl_bots_loaded = 0;
@@ -180,8 +163,10 @@ static item*                  wl_head = NULL;
 static item*                  bl_head = NULL;
 
 
-/* wl_fail is called whenever
+/**
+ * wl_fail is called whenever
  * an error happens throughout this module
+ * 
  * @param what -> error message
  */
 static void wl_fail(const char* what)
@@ -189,9 +174,11 @@ static void wl_fail(const char* what)
     fprintf(stderr, "wl_module: system call failed: %s: %s\n", what, what);
 }
 
-/* Domain specific malloc
+/**
+ * internal malloc
  * report any error that arose from
  * wl's memory allocation
+ * 
  * @param sz -> target allocation
  */
 static void* wl_xmalloc(size_t sz)
@@ -204,8 +191,10 @@ static void* wl_xmalloc(size_t sz)
     return (char*)"";
 }
 
-/* Reverse DNS a given address
- * @param addr -> ip address
+/**
+ * reverse DNS a given address
+ * 
+ * @param addr -> IPv4 address
  */
 static char* wl_reverse_dns(char* addr)
 {
@@ -218,8 +207,10 @@ static char* wl_reverse_dns(char* addr)
     return he->h_name;
 }
 
-/* Forward DNS a given address
- * @param addr -> ip address
+/**
+ * forward DNS a given address
+ * 
+ * @param addr -> IPv4 address
  */
 static char* wl_forward_dns(char* addr_a)
 {
@@ -254,52 +245,12 @@ static char* wl_forward_dns(char* addr_a)
     return addr_a;
 }
 
-
-/* Verify whether the address
- * is in one of the wl_domains
- * if the constraint is any of the 
- * bots, return success on a match.
- * Otherwise find the required bot
- * @param: addr -> ip address
- * @param: constraint -> bot delimiter
- */
-inline static int wl_assert(char* addr, char* constraint)
-{
-    regex_t rgx;
-    int rgx_state;
-    size_t i;
-    size_t matches;
-
-    for (i = 0; i <= sizeof(wl_valid_domains) / 8; i ++) {
-            rgx_state = regcomp(&rgx, wl_valid_domains[i], REG_EXTENDED);
-
-            if (rgx_state)
-                wl_fail("ERR: WL couldn't compile agaisnt expression");
-
-            rgx_state = regexec(&rgx, addr, 0, NULL, 0);
-
-            if (!rgx_state)
-                matches ++;
-    }
-
-    if (matches > 1 && !strcasecmp(constraint, "any"))
-        return 1;
-
-    if (matches > 0)
-        return 1;
-      
-    return 0; 
-}
-
-
-/* Verify if the user agent 
- * is one of the required ones 
- * This is used to verify whether
- * a user may be spoofing his agent or not.
- * Additionally this should be
- * called before any dns based functions.
+/**
+ * verify if the user agent is an agent
+ * we need to evaluate
+ *
  * @param: agent -> HTTP Agent Tag
- * @param: wl_cfg -> wl config's bots
+ * @param: wl_cfg -> module config
  */
 inline static int wl_in_agents(char* agent, wl_config* wl_cfg)
 {
@@ -331,72 +282,72 @@ inline static int wl_in_agents(char* agent, wl_config* wl_cfg)
     return found;
 }
 
-/* Find a particular element
- * in the whitelist
- *
- * @param -> ip address
+/**
+ * point the whitelist to 
+ * it's head
+ * 
+ */
+static void wl_reset_wl()
+{
+    wl_element = wl_head;
+}
+
+/**
+ * check if this IP is already  
+ * whitelisted
+ * 
+ * @param -> IPv4 address
  */
 static int wl_in_wl(char* addr)
 {
-    size_t found = 0;
     while (wl_element) {
-        if (!strcasecmp(wl_element->addr, addr))
-            found = 1;
+        if (!strcasecmp(wl_element->addr, addr)) {
+            wl_reset_wl();
+            return 1;
+	}
 
         wl_element = wl_element->next;
     }
-
-    wl_element = wl_head;
-    return found;
+    wl_reset_wl();
+    return 0;
 }
 
-/* Same as wl_in_wl/1
+/**
+ * same as wl_reset_wl/0
  * for blacklists
- * @param: addr -> ip address
+ * 
+ */
+static void wl_reset_bl()
+{
+    bl_element = bl_head;
+}
+
+/**
+ * same as wl_in_wl/1
+ * for blacklists
+ * 
+ * @param: addr -> IPv4 address
  */
 static int wl_in_bl(char* addr)
 {
-    size_t found = 0;
     while (bl_element) {
-        if (!strcasecmp(bl_element->addr, addr))
-            found = 1;
+        if (!strcasecmp(bl_element->addr, addr)) {
+            wl_reset_bl(); 
+            return 1;
+        }
 
         bl_element = bl_element->next;
     }
-
-    bl_element = bl_head;
-    return found;
-}
-
-/* Append to the black list
- * and call the handler immediately after. 
- *
- * @param addr -> ip address
- * @param rec -> apache's request structure
- */
-inline static void wl_append_block(char* addr, request_rec* rec)
-{
-    wl_append_bl(addr);
-    wl_blocked_handler(rec, "");
+    wl_reset_bl();
+    return 0;
 }
 
 
-/* Append to the whitelist
- * and call the accepted
- * handler
- * @param addr -> ip address
- * @param rec -> apache request structure
- */
-inline static void wl_append_accept(char* addr, request_rec* rec)
-{
-    wl_append_wl(addr);
-    wl_accepted_handler(rec, "");
-}
-
-
-/* Append to the whitelist
+/** 
+ * append to the whitelist
  * in memory
- * @param addr -> ip address
+ *
+ * @param addr -> IPv4 address
  */
 static void wl_append_wl(char* addr)
 {
@@ -406,9 +357,11 @@ static void wl_append_wl(char* addr)
     wl_head = wl_element;
 }
 
-/* Same as wl_append_wl/1
+/**
+ * same as wl_append_wl/1
  * for blacklists
- * @param addr -> ip address
+ *
+ * @param addr -> IPv4 address
  */
 static void wl_append_bl(char* addr)
 {
@@ -418,11 +371,12 @@ static void wl_append_bl(char* addr)
     bl_head = bl_element;
 }
 
-/* Append a new bot to
+/**
+ * append a new bot to
  * WL's configuration.
  *
- * @param wl_cfg -> wl's configuration
- * @bot -> user agent substring (for bot). i.e: Yandex/2.1
+ * @param wl_cfg -> module config
+ * @param bot -> user agent substring (for bot). i.e: Yandex/2.1
  */
 inline static void wl_append_bot(wl_config* wl_cfg, char* bot)
 {
@@ -432,10 +386,11 @@ inline static void wl_append_bot(wl_config* wl_cfg, char* bot)
     wl_cfg->chead = wl_cfg->cbot;
 }
 
-/* Get rid of any extra
- * characters this ip addr
+/**
+ * gets rid of any extra characters this ip addr
  * may have.
- * @param addr -> ip address
+ *
+ * @param addr -> IPv4 address
  * @param strip -> character delimiter
  */
 static void wl_strip_ip(char *addr, char* strip)
@@ -449,11 +404,11 @@ static void wl_strip_ip(char *addr, char* strip)
     *q = '\0';
 }
 
-/* Concatenate two ip strings
- * this is used to set variables
- * in the setenv_variable collection
- * @param ip1 -> ip address
- * @param ip2 -> ip address
+/** 
+ * concatenate two ip strings
+ * 
+ * @param ip1 -> IPv4 address
+ * @param ip2 -> IPv4 address
  */
 const char* wl_concat(char* ip1, char* ip2)
 {
@@ -464,11 +419,11 @@ const char* wl_concat(char* ip1, char* ip2)
     return result;
 }
 
-/* Depending on the target list
- * we may need to strip any extranatous
- * characters from the ip string.
- * afterwards add it to the whitelist
- * @param addr -> ip address
+/** 
+ * do any pre insertion checks before
+ * appending to whitelist
+ *  
+ * @param addr -> IPv4 address
  */
 static void wl_strip_append_wl(char* addr)
 {
@@ -481,9 +436,11 @@ static void wl_strip_append_wl(char* addr)
         wl_append_wl(addr);
 }
 
-/* Same as wl_strip_append_wl/1
+/* 
+ * same as wl_strip_append_wl/1
  * for blacklists
- * @param addr -> ip address
+ *
+ * @param addr -> IPv4 address
  */
 static void wl_strip_append_bl(char* addr)
 {
@@ -496,12 +453,12 @@ static void wl_strip_append_bl(char* addr)
         wl_append_bl(addr);
 }
 
-/* Strip any whitespace from a bot's
- * substring, afterwards add it to 
- * the bot list.
+/**
+ * adds a user agent to our list of
+ * bots
  *
- * @param bot -> bot substring
- * @param wl_cfg -> wl's config
+ * @param bot -> HTTP user agent
+ * @param wl_cfg -> module config
  */
 inline static void wl_strip_append_bot(char* bot, wl_config* wl_cfg)
 {
@@ -512,11 +469,13 @@ inline static void wl_strip_append_bot(char* bot, wl_config* wl_cfg)
         wl_append_bot(wl_cfg, bot);
 }
 
-/* Replace a given ip to its raw 
- * reciprocal
- * @param addr -> ip address
- * @param rep -> port to transform
- * @param with -> transformation 
+/**
+ * remove the trailing /32 or /16
+ * on a ip address
+ *
+ * @param addr -> IPv4 address
+ * @param rep -> port string "/32" or "/16"
+ * @param with -> replacement string
  */ 
 static char* wl_replace_ip(char *addr, char *rep, char *with) {
     char *result;       //the return string
@@ -565,11 +524,12 @@ static char* wl_replace_ip(char *addr, char *rep, char *with) {
 }
 
 
-/* Load the specified 
- * whitelist file into
+/**
+ * load the specified  whitelist file into
  * memory
- * @param fl -> whitelist file (loaded in config)
- * @param rec -> apache request structure
+ *
+ * @param fl -> path to file
+ * @param rec -> Apache 2 request
  */
 static void wl_load_wl(char* fl, request_rec* rec)
 {
@@ -590,12 +550,11 @@ static void wl_load_wl(char* fl, request_rec* rec)
     wl_wl_loaded = 1;
 }
 
-/* Load the specified
- * blacklist into 
- * memory
+/**
+ * same as wl_load_wl/2 for black lists
  *
- * @param fl -> whitelist file (loaded in config)
- * @param rec -> apache request structure
+ * @param fl -> path to file
+ * @param rec -> Apache 2 request
  */
 static void wl_load_bl(char* fl, request_rec* rec)
 {
@@ -616,12 +575,20 @@ static void wl_load_bl(char* fl, request_rec* rec)
     wl_bl_loaded = 1;
 }
 
-/* Load a list of bots into memory
- * this should add to any existing bots
- * set in the configuration file
+/**
+ * point the bot list to 
+ * head
+ */
+static void wl_reset_bots()
+{
+    wl_cfg->cbot = wl_cfg->chead;
+}
+
+/**
+ * load a list of user agents
  *
- * @param fl -> whitelist file (loaded in config)
- * @param rec -> apache request structure
+ * @param fl -> path to file
+ * @param rec -> Apache 2 request
  */
 static void wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg)
 {
@@ -654,146 +621,35 @@ static void wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg)
     wl_bots_loaded = 1;
 }
 
-
-/* Provided a full user agent string
- * pluck it down to its most important
- * substring. NOTE: This is not always
- * guarenteed to work and is experimental
- *
- * @param agent -> full user agent string.
- */
-static char* wl_pluck_agent(char* agent)
-{
-    return agent;
-}
-
-/* Handle a request that has been
- * blocked. Usually this means we 
- * Don't allow the user agent
- * to view the content.
+/**
+ * checks whether an incoming request
+ * needs to be blocked
  * 
- * @param rec -> apache request structure
- * @param handler -> an anchor to go to
- */
-static void wl_blocked_handler(request_rec* rec, char* handler)
-{
-    if (strcasecmp(handler, "")) {
-            const char* user_agent = apr_table_get(rec->headers_in, "User-Agent");
-            ap_rputs(DOCTYPE_HTML_3_2, rec);
-            ap_rputs("<HTML>\n", rec);
-            ap_rprintf(rec, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", handler);
-            ap_rprintf(rec, "%s", user_agent);
-            ap_rputs("</HTML>\n", rec);
-    }
-
-#if WL_MODULE_DEBUG_MODE
-   AP_LOG_INFO(rec, "Request landed in blacklist");
-#endif
-}
-
-/* Whenever a request
- * gets accepted
- * @param rec -> apache request structure
- */
-static void wl_accepted_handler(request_rec* rec, char* handler)
-{
-    if (strcasecmp(handler, "")) {
-            const char* user_agent = apr_table_get(rec->headers_in, "User-Agent");
-            ap_rputs(DOCTYPE_HTML_3_2, rec);
-            ap_rputs("<HTML>\n", rec);
-            ap_rprintf(rec, "<meta http-equiv=\"refresh\" content=\"0; url=%s\">", handler);
-            ap_rprintf(rec, "%s", user_agent);
-            ap_rputs("</HTML>\n", rec);
-    }
-#if WL_MODULE_DEBUG_MODE
-    AP_LOG_INFO(rec, "Request landed in whitelist");
-#endif
-}
-
-/* Print out the variables found
- * in the wl configuration. This is
- * called whenever wl_debug is enabled
- * @param wl_cfg -> wl's config structure
- * @param rec -> apache request structure
- */
-static void wl_show_variables(wl_config* wl_cfg, request_rec* rec)
-{
-    AP_LOG_INFO(rec, "WLEnabled: %d", wl_cfg->enabled);
-    AP_LOG_INFO(rec, "WLDebug: %d", wl_cfg->debug);
-    AP_LOG_INFO(rec, "WLListEnabled: %d", wl_cfg->lenabled);
-    AP_LOG_INFO(rec, "WLBot: %s", wl_cfg->bot);
-    AP_LOG_INFO(rec, "WLList: %s", wl_cfg->list);
-    AP_LOG_INFO(rec, "WLBlacklist: %s", wl_cfg->blist);
-    AP_LOG_INFO(rec, "WLBotlist: %s", wl_cfg->btlist);
-    AP_LOG_INFO(rec, "WLBotAutoAdd: %d", wl_cfg->btauto);
-    AP_LOG_INFO(rec, "WLDNSTimeout: %d", wl_cfg->dnstimeout);
-    AP_LOG_INFO(rec, "WLForward: %d", wl_cfg->forward);
-    AP_LOG_INFO(rec, "WLBlockedHandler: %s", wl_cfg->bhandler);
-    AP_LOG_INFO(rec, "WLAcceptedHandler: %s", wl_cfg->ahandler);
-}
-
-/* Start a wl instance. This
- * will basically assert where the request
- * lands in the config.
- * @param rec -> apache request structure
+ * @param rec -> Apache 2 request
  */
 static int wl_init(request_rec* rec)
 {
-    /* First we need to reverse dns the
-     _s* addr.
-     */
-   char* log_info = "FastCGI Header";
-
     wl_show_variables(wl_cfg, rec);
     char* addr;
     char* initial;
     char* agent;
-    size_t bt_cnt;
-
-    /* first check the confguration
-     */
-
     wl_config* wl_cfg = (wl_config*) ap_get_module_config(rec->per_dir_config, &wl_module);
         
     if (wl_cfg->forward == 1) {
-	    //apr_table_set(rec->subprocess_env, "MODWL_BOTS", wl_cfg->bot);
+	    apr_table_set(rec->subprocess_env, "MODWL_BOTS", wl_cfg->bot);
     }
   
 #if WL_MODULE_DEBUG_MODE
-    if (wl_cfg->debug == 1) {
-        wl_show_variables(wl_cfg, rec);
-    }
+    wl_show_variables(wl_cfg, rec);
 #endif
 
-     /* Check if the configuration
-     * is enabled. If it isn't 
-     * let the request by
-     */ 
-
-    if (wl_cfg->enabled != 1)
+    if (wl_cfg->enabled != 1) {
         return (OK);
+    }
 
-    /* Load the whitelist
-     * into memory
-     */
-    if (strcasecmp(wl_cfg->list, ""))
-        if (wl_wl_loaded != 1)
-            wl_load_wl(wl_cfg->list, rec);
-
-    /* Load the black list into
-     * memory.
-     */
-    if (strcasecmp(wl_cfg->blist, ""))
-        if (wl_bl_loaded != 1)
-            wl_load_bl(wl_cfg->blist, rec);
-            
-
-    /* Load the external bot list
-     * into memory
-     */
-    if (strcasecmp(wl_cfg->btlist, ""))
-        if (wl_bots_loaded != 1)
-            wl_load_bots(wl_cfg->btlist, rec, wl_cfg);
+    if (strcasecmp(wl_cfg->btlist, "") && wl_bots_loaded != 1) {
+        wl_load_bots(wl_cfg->btlist, rec, wl_cfg);
+    }
 
 #if AP_SERVER_MAJORVERSION_NUMBER >= 2 && AP_SERVER_MINORVERSION_NUMBER >= 4
     addr = initial = rec->connection->client_ip;
@@ -801,131 +657,96 @@ static int wl_init(request_rec* rec)
     addr = initial = rec->connection->remote_ip;
 #endif
 
-
-    if (wl_cfg->forward == 1)
+    if (wl_cfg->forward == 1) {
 	apr_table_set(rec->subprocess_env, "MODWL_ORIGINAL", addr);
+    }
 
 #if WL_MODULE_DEBUG_MODE
-    if (wl_cfg->debug == 1)
-        AP_LOG_INFO(rec, "Original remote ip is: %s", addr);
-
-
-    bt_cnt = 0;
+    AP_LOG_INFO(rec, "Original remote ip is: %s", addr);
 
     while (wl_cfg->cbot != NULL) {
         AP_LOG_INFO(rec, "Initialized bot: %s", wl_cfg->cbot->name);
 	
         wl_cfg->cbot = wl_cfg->cbot->next;
-	bt_cnt ++;
     }
-
-    wl_cfg->cbot = wl_cfg->chead;
+    wl_reset_bots();
 #endif
 
     agent = wl_xmalloc(sizeof(char) * 256);
     strcpy(agent, (char*) apr_table_get(rec->headers_in, "User-Agent"));
 
-    /* first check if the user
-     * agent is in one of our required
-     * user agents
-     * when it isn't let the request
-     * through
-     */
 #if WL_MODULE_DEBUG_MODE
-    if (wl_cfg->debug == 1)
-        AP_LOG_INFO(rec,  "User agent is: %s", agent);
+    AP_LOG_INFO(rec,  "User agent is: %s", agent);
 #endif
     
 #if WL_MODULE_DEBUG_MODE
-     if (wl_cfg->debug == 1)
-        AP_LOG_INFO(rec, "Agent: %s did not match any needed user agents", agent);
+    AP_LOG_INFO(rec, "Agent: %s did not match any needed user agents", agent);
 #endif
      addr = wl_reverse_dns(addr);
 
-     if (wl_cfg->forward == 1)
+     if (wl_cfg->forward == 1) {
   	apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
+     }
 
      addr = wl_forward_dns(addr);
 
-     if (wl_cfg->forward == 1)
+     if (wl_cfg->forward == 1) {
 	apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
+     }
 
-     if (wl_cfg->forward == 1)
-  	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
+     if (wl_cfg->forward == 1) {
+  	apr_table_set(rec->subprocess_env, "MODWL_STATUS", true);
+     }
 
     addr = wl_reverse_dns(addr);
 
-    if (wl_cfg->forward == 1)
+    if (wl_cfg->forward == 1) {
 	apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
+    }
 
 #if WL_MODULE_DEBUG_MODE
-    if (wl_cfg->debug == 1)
-        AP_LOG_INFO(rec, "Reverse dns is: %s", addr);
+    AP_LOG_INFO(rec, "Reverse dns is: %s", addr);
 #endif
 
-    /* if all goes well -- addr is from a good server
-     * we should then need to forward this
-     * dns
-     */
-    addr = wl_forward_dns(addr);
-
-    if (wl_cfg->forward == 1)
-	apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
-
 #if WL_MODULE_DEBUG_MODE
-    if (wl_cfg->debug == 1)
-        AP_LOG_INFO(rec, "Converted remote ip is: %s", addr);
+    AP_LOG_INFO(rec, "Final conversion of remote ip is: %s", addr);
 #endif 
 
-    /* finally we need to check
-     * if addr is the initial
-     * addr.
-     * Strip any whitespace from both
-     * initial and address before
-     * trying to use strcmp
-     */
-    //wl_strip_ip(addr, " ");
-  
-    if (!strcasecmp(initial, addr)) {
-        // add to white list
-
-        wl_append_wl(initial);
-        wl_append_list(wl_cfg->list, initial, rec);
-	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
-
-        return wl_close(OK);
-    } else {
-        if (wl_cfg->btauto == 1)
+    if (strcasecmp(initial, addr)) {
+        if (wl_cfg->btauto == 1) {
             wl_append_bot(wl_cfg, wl_pluck_agent(agent));
+        }
 
         wl_append_bl(initial);
         wl_append_list(wl_cfg->blist, initial, rec);
-	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_FAILMSG);
+	apr_table_set(rec->subprocess_env, "MODWL_STATUS", false);
+        return wl_close(DECLINED);
     }
-   
-    return wl_close(DECLINED);
+    // add to white list
+
+    wl_append_wl(initial);
+    wl_append_list(wl_cfg->list, initial, rec);
+    apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
+
+    return wl_close(OK);
 }
 
-/* cleanup any whitelist or
+/**
+ * cleanup any whitelist or
  * blacklist
- * @param status -> DECLINED | OK
+ * 
+ * @param status -> DECLINED or OK
  */
 static int wl_close(int status)
 {
     return (status);
 }
 
-/* Per server configuration.
- * Pending changes
- * For the configuration, 
- * we want to check if the
- * module has been enabled. Additionally 
- * verify which user agents
- * need to use the whitelist
- * module.
+/**
+ * per server configuration.
  *
  * @param pool -> apache's memory pool or HTTPd in this case
- * @param context -> wl config's context
+ * @param server_rec -> Apache 2 server rec
  */
 inline static void* wl_server_config(apr_pool_t* pool, server_rec* s)
 {
@@ -950,9 +771,8 @@ inline static void* wl_server_config(apr_pool_t* pool, server_rec* s)
     return cfg;
 }
 
-/* Per directory confiuguration.
- * same as wl_server_config/2 
- * Only this is directory based
+/**
+ * per directory confiuguration.
  *
  * @param pool -> apache's memory pool or HTTPd in this case
  * @param context -> wl config's context
@@ -982,8 +802,8 @@ inline static void* wl_dir_config(apr_pool_t* pool, char* context)
     return cfg; 
 }
 
-/* Directives for when
- * wl module is enabled
+/**
+ * directives enabled mod_wl
  *
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
@@ -1001,8 +821,8 @@ const char* wl_set_enabled(cmd_parms* cmd, void* cfg, const char* arg)
     return NULL;
 }
 
-/* Enable whitelist
- * list functionality
+/**
+ * directive enables white lists
  * 
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
@@ -1020,35 +840,14 @@ const char* wl_set_enabled_list(cmd_parms* cmd, void* cfg, const char* arg)
     return NULL;
 }
 
-/* Convention to turn the 
- * debug mode on or off
- *
- * @param cmd -> configuration inherit from httpd.conf
- * @param cfg -> configuration structure
- * @param arg -> config set value
- */
-const char* wl_set_debug(cmd_parms* cmd, void* cfg, const char* arg)
-{
-    wl_config* wl_cfg = (wl_config*) cfg;
-
-    if (!strcasecmp(arg, "on"))
-        wl_cfg->debug = 1;
-    else
-        wl_cfg->debug = 0;
-
-    return NULL;
-}
-
-/* set the bot wl will be using
+/**
+ * sets the bot(s) wl will be using
  * acceptable values are any user agent substring
- * this option can be given in singular or plural
- * form. ex:
+ * this option can be given in a "|" delimited
+ * string. ex:
  * Googlebot/2.1 | bingbot/2.1 | Yahoo Slurp!
  * or
  * Googlebot
- *
- * also "any" can be used to match agaisnt any
- * useraagent
  *
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
@@ -1069,8 +868,9 @@ const char* wl_set_bot(cmd_parms* cmd, void* cfg, const char* args)
     piece = strtok(bots, delims);
 
     while (piece != NULL) {
-        if (!strcasecmp(piece, "any"))
+        if (!strcasecmp(piece, "any")) {
             wl_cfg->btany = 1;
+        }
 
         wl_cfg->cbot = (bitem*) wl_xmalloc(sizeof(bitem));
         wl_cfg->cbot->name = piece;
@@ -1083,8 +883,9 @@ const char* wl_set_bot(cmd_parms* cmd, void* cfg, const char* args)
 }
 
 
-/* Set whether we want to auto add new bots
- * to the bot list.
+/** 
+ * set the timeout for forward and reverse DNS
+ * lookups
  *
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
@@ -1102,16 +903,16 @@ const char* wl_set_dns_timeout(cmd_parms* cmd, void* cfg, const char* arg)
     return NULL;
 }
 
-/* Set whether to allow forwarding or not
- * this will upstream all requests to 
- * higher level resources. Definitions for 
- * the forward can be found @ http://
+/** 
+ * set whether to set subprocess env based on
+ * reverse, forward DNS lookups and the status
+ * of the module
  *
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
  * @param arg -> config set value
  */
-const char* wl_set_forward(cmd_parms* cmd, void* cfg, const char* arg)
+const char* wl_set_subprocess_env(cmd_parms* cmd, void* cfg, const char* arg)
 {
     wl_config* wl_cfg = (wl_config*) cfg;
 
@@ -1125,8 +926,8 @@ const char* wl_set_forward(cmd_parms* cmd, void* cfg, const char* arg)
 
 
 
-/* Set a bot wl module can automatically
- * use.
+/**
+ * set if mod_wl should add new bots automatically
  *
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
@@ -1145,8 +946,8 @@ const char* wl_set_bot_auto_add(cmd_parms* cmd, void* cfg, const char* arg)
 }
 
 
-/* Read the desired bots from a file
- * file should be seperated by newlines
+/**
+ * set a file to read bots from
  * 
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
@@ -1160,8 +961,8 @@ const char* wl_set_bot_list(cmd_parms* cmd, void* cfg, const char* args)
     return NULL;
 }
 
-/* This sets an area where WLModule can find
- * the whitelist. Path should be absolute.
+/**
+ * set a file to read existing whitelist entries from
  *
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
@@ -1175,8 +976,8 @@ const char* wl_set_list(cmd_parms* cmd, void* cfg, const char* arg)
     return NULL;
 }
 
-/* Set the Blacklist location
- * same as wl_set_list/1 (for blacklists)
+/**
+ * same as wl_set_list/2 for blacklists
  *
  * @param cmd -> configuration inherit from httpd.conf
  * @param cfg -> configuration structure
@@ -1190,39 +991,9 @@ const char* wl_set_blist(cmd_parms* cmd, void* cfg, const char* arg)
     return NULL;
 }
 
-/* Set the URL wl_module will go to
- * having received a bad request
- *
- * @param cmd -> configuration inherit from httpd.conf
- * @param cfg -> configuration structure
- * @param arg -> config set value
- */
-const char* wl_set_blocked_handler(cmd_parms* cmd, void* cfg, const char* arg)
-{
-    wl_config* wl_cfg = (wl_config*) cfg;
-    wl_cfg->bhandler = (char*) arg;
 
-    return NULL;
-}
-
-/* Same as wl_set_blocked_handler/2 for
- * accepted requests.
- *
- * @param cmd -> configuration inherit from httpd.conf
- * @param cfg -> configuration structure
- * @param arg -> config set value
- */
-const char* wl_set_accepted_handler(cmd_parms* cmd, void* cfg, const char* arg)
-{
-    wl_config* wl_cfg = (wl_config*) cfg;
-    wl_cfg->ahandler = (char*) arg;
-
-    return NULL;
-}
-
-/* Register the hook in the Apache
- * this basically tells Apache HTTPd to call
- * our handler whenever a request is made.
+/**
+ * registers the hook in the Apache
  *
  * @param pool -> Apache's request pool
  */
@@ -1232,13 +1003,13 @@ static void wl_hooks(apr_pool_t* pool)
 }
 
 
-/* Open the whitelist file
- * and append to it given the received
+/**
+ * open the whitelist file and append a
  * ip address.
  *
- * @param fl -> file path and name
- * @param addr -> ip address
- * @param rec -> apache's request structure
+ * @param fl -> file path
+ * @param addr -> IPv4 address
+ * @param rec -> Apache 2 request
  */
 inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 {
@@ -1258,8 +1029,9 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 				       rec->pool);
 	       
 
-            if (!(wl_file_st == APR_SUCCESS))
+            if (!(wl_file_st == APR_SUCCESS)) {
 		return;
+            }
 
 	    wl_file_st = apr_file_lock(wl_file, 
 				       APR_FLOCK_EXCLUSIVE | 
@@ -1271,67 +1043,39 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 		    apr_file_close(wl_file);
 
 #if WL_MODULE_DEBUG_MODE
-      if (wl_cfg->debug) {
-	    AP_LOG_INFO(rec, "Whitelist added: %s", addr);
-      }
+      AP_LOG_INFO(rec, "Whitelist added: %s", addr);
 #endif
 		    return;
-	    } else {
+	    } 
+            return;
 #if WL_MODULE_DEBUG_MODE
-      if (wl_cfg->debug) {
-	    AP_LOG_INFO(rec, "Whitelist couldn't add: %s, (status err): %d", addr, wl_file_st);
-      }
-#endif
-	    }
-    } else {
-#if WL_MODULE_DEBUG_MODE
-     if (wl_cfg->debug) {
-	    AP_LOG_INFO(rec, "Whitelist couldn't add: %s", addr);
-    }
+      AP_LOG_INFO(rec, "Whitelist couldn't add: %s, (status err): %d", addr, wl_file_st);
 #endif
     }
+#if WL_MODULE_DEBUG_MODE
+    AP_LOG_INFO(rec, "Whitelist couldn't add: %s", addr);
+#endif
 }
 
-/* Apache configuration directives
+/** 
+ * Apache configuration directives
  * either set the configuration for
  * access level configurations or
  * RCRF based configurations not both
  */
-#ifdef WL_MODULE_ACCESS_CONFIG
-static const command_rec wl_directives[] = 
-{
-    AP_INIT_TAKE1("wlEnabled", wl_set_enabled, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "ENABLE OR DISABLE WL"),
-    AP_INIT_TAKE1("wlListEnabled", wl_set_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "SET WL's WHITELIST"),
-    AP_INIT_TAKE1("wlList", wl_set_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "SET WL's WHITELIST"),
-    AP_INIT_TAKE1("wlBlackList", wl_set_blist, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "SET WL'S BLACKLIST"),
-    AP_INIT_TAKE1("wlDebug", wl_set_debug, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBlockedHandler", wl_set_blocked_handler, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlAcceptedHandler", wl_set_accepted_handler, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBotAutoAdd", wl_set_bot_auto_add, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlDnsTimeout", wl_set_dns_timeout, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlForward", wl_set_forward, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_RAW_ARGS("wlBot", wl_set_bot, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
-    { NULL }
-};
-#else
 static const command_rec wl_directives[] = 
 {
     AP_INIT_TAKE1("wlEnabled", wl_set_enabled, NULL, RSRC_CONF, "ENABLE OR DISABLE WL"),
     AP_INIT_TAKE1("wlListEnabled", wl_set_list, NULL, ACCESS_CONF, "SET WL's WHITELIST"),
     AP_INIT_TAKE1("wlList", wl_set_list, NULL, RSRC_CONF, "SET WL's WHITELIST"),
     AP_INIT_TAKE1("wlBlackList", wl_set_blist, NULL, RSRC_CONF, "SET WL'S BLACKLIST"),
-    AP_INIT_TAKE1("wlDebug", wl_set_debug, NULL, RSRC_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlBlockedHandler", wl_set_blocked_handler, NULL, RSRC_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlAcceptedHandler", wl_set_accepted_handler, NULL, RSRC_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlBotAutoAdd", wl_set_bot_auto_add, NULL, RSRC_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlDnsTimeout", wl_set_dns_timeout, NULL, ACCESS_CONF, "DEBUG MODE"),
-    AP_INIT_TAKE1("wlForward", wl_set_forward, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
+    AP_INIT_TAKE1("wlSubprocessEnv", wl_set_subprocess_env, NULL, RSRC_CONF|OR_ALL|ACCESS_CONF, "DEBUG MODE"),
     AP_INIT_RAW_ARGS("wlBot", wl_set_bot, NULL, RSRC_CONF, "DEBUG MODE"),
     { NULL }
 };
-#endif
 
 /* module definitions
  */
