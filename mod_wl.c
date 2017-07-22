@@ -35,22 +35,12 @@
 #include <assert.h>
 #include <regex.h>
 #include <string.h>
-
-/* windows setup */
-#ifdef WIN32
-#include <winsock2.h>
-#include <Ws2tcpip.h>
-
-/* linux setup */
-#else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#endif
-
 /* apache libraries */
 #include <string.h>
 #include "apr_hash.h"
@@ -67,11 +57,14 @@
 
 
 #define WL_MODULE_DEBUG_MODE 1
-#define WL_MODULE							 	   "Whitelist Module"
+#define WL_MODULE_STATUS_OK "OK"
+#define WL_MODULE_STATUS_FAIL "FAIL"
+#define WL_MODULE_LOG_ID "mod_wl"
+
 #define AP_LOG_DEBUG(rec, fmt, ...) ap_log_rerror(APLOG_MARK, APLOG_DEBUG,  0, rec, fmt, ##__VA_ARGS__)
-#define AP_LOG_INFO(rec, fmt, ...)  ap_log_rerror(APLOG_MARK, APLOG_INFO,   0, rec, "[" WL_MODULE "] " fmt, ##__VA_ARGS__)
-#define AP_LOG_WARN(rec, fmt, ...)  ap_log_rerror(APLOG_MARK, APLOG_WARNING,0, rec, "[" WL_MODULE "] " fmt, ##__VA_ARGS__)
-#define AP_LOG_ERR(rec, fmt, ...)   ap_log_rerror(APLOG_MARK, APLOG_ERR,    0, rec, "[" WL_MODULE "] " fmt, ##__VA_ARGS__)
+#define AP_LOG_INFO(rec, fmt, ...)  ap_log_rerror(APLOG_MARK, APLOG_INFO,   0, rec, "[" WL_MODULE_LOG_ID "] " fmt, ##__VA_ARGS__)
+#define AP_LOG_WARN(rec, fmt, ...)  ap_log_rerror(APLOG_MARK, APLOG_WARNING,0, rec, "[" WL_MODULE_LOG_ID "] " fmt, ##__VA_ARGS__)
+#define AP_LOG_ERR(rec, fmt, ...)   ap_log_rerror(APLOG_MARK, APLOG_ERR,    0, rec, "[" WL_MODULE_LOG_ID "] " fmt, ##__VA_ARGS__)
 
 typedef struct {
     char*          wl_dns_forward;
@@ -105,7 +98,7 @@ typedef struct {
     int                     debug;
     int                  lenabled;
     int                dnstimeout;
-    int			  forward;
+    int			    spenv;
     bitem*                   cbot;
     bitem*                  chead;
 } wl_config;
@@ -142,7 +135,6 @@ static item*                  bl_element;
 inline static void            wl_strip_append_bot(char* bot, wl_config* wl_cfg);
 inline static int             wl_in_agents(char* agent, wl_config* wl_cfg);
 inline static void            wl_append_bot(wl_config* wl_cfg, char* bot);
-inline static void            wl_show_variables(wl_config* wl_cfg, request_rec* rec);
 inline static void*           wl_server_config(apr_pool_t* pool, server_rec* s);
 inline static void*           wl_dir_config(apr_pool_t* pool, char* context);
 inline static void            wl_append_list(char* fl, char* addr, request_rec* rec);
@@ -155,7 +147,6 @@ const char*                   wl_set_blist(cmd_parms* cmd, void* cfg, const char
 const char*                   wl_set_bot_auto_add(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_dns_timeout(cmd_parms* cmd, void* cfg, const char* arg);
 const char*		      wl_concat(char* ip1, char* ip2);
-static char*                  wl_pluck_agent(char* agent);
 static int                    wl_wl_loaded = 0;
 static int                    wl_bl_loaded = 0;
 static int                    wl_bots_loaded = 0;
@@ -629,19 +620,14 @@ static void wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg)
  */
 static int wl_init(request_rec* rec)
 {
-    wl_show_variables(wl_cfg, rec);
     char* addr;
     char* initial;
     char* agent;
     wl_config* wl_cfg = (wl_config*) ap_get_module_config(rec->per_dir_config, &wl_module);
         
-    if (wl_cfg->forward == 1) {
+    if (wl_cfg->spenv == 1) {
 	    apr_table_set(rec->subprocess_env, "MODWL_BOTS", wl_cfg->bot);
     }
-  
-#if WL_MODULE_DEBUG_MODE
-    wl_show_variables(wl_cfg, rec);
-#endif
 
     if (wl_cfg->enabled != 1) {
         return (OK);
@@ -657,7 +643,7 @@ static int wl_init(request_rec* rec)
     addr = initial = rec->connection->remote_ip;
 #endif
 
-    if (wl_cfg->forward == 1) {
+    if (wl_cfg->spenv == 1) {
 	apr_table_set(rec->subprocess_env, "MODWL_ORIGINAL", addr);
     }
 
@@ -684,23 +670,19 @@ static int wl_init(request_rec* rec)
 #endif
      addr = wl_reverse_dns(addr);
 
-     if (wl_cfg->forward == 1) {
+     if (wl_cfg->spenv == 1) {
   	apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
      }
 
      addr = wl_forward_dns(addr);
 
-     if (wl_cfg->forward == 1) {
+     if (wl_cfg->spenv == 1) {
 	apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
-     }
-
-     if (wl_cfg->forward == 1) {
-  	apr_table_set(rec->subprocess_env, "MODWL_STATUS", true);
      }
 
     addr = wl_reverse_dns(addr);
 
-    if (wl_cfg->forward == 1) {
+    if (wl_cfg->spenv == 1) {
 	apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
     }
 
@@ -714,19 +696,19 @@ static int wl_init(request_rec* rec)
 
     if (strcasecmp(initial, addr)) {
         if (wl_cfg->btauto == 1) {
-            wl_append_bot(wl_cfg, wl_pluck_agent(agent));
+            wl_append_bot(wl_cfg, agent);
         }
 
         wl_append_bl(initial);
         wl_append_list(wl_cfg->blist, initial, rec);
-	apr_table_set(rec->subprocess_env, "MODWL_STATUS", false);
+	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_FAIL);
         return wl_close(DECLINED);
     }
     // add to white list
 
     wl_append_wl(initial);
     wl_append_list(wl_cfg->list, initial, rec);
-    apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OKMSG);
+    apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OK);
 
     return wl_close(OK);
 }
@@ -917,9 +899,9 @@ const char* wl_set_subprocess_env(cmd_parms* cmd, void* cfg, const char* arg)
     wl_config* wl_cfg = (wl_config*) cfg;
 
     if (!strcasecmp(arg, "on"))
-            wl_cfg->forward = 1;
+            wl_cfg->spenv = 1;
     else
-            wl_cfg->forward = 0;
+            wl_cfg->spenv = 0;
 
     return NULL;
 }

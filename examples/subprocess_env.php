@@ -1,6 +1,7 @@
 <?php
-/* An example for PHP use with mod_wl
- * this will output all the modules details 
+/**
+ * An example for PHP use with mod_wl
+ * this will output all the module's details 
  */
 
 echo "Original Address is: " . $_SERVER{'MODWL_ORIGINAL'} . "<br />";

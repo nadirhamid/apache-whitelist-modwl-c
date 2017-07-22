@@ -25,7 +25,6 @@ Verifiying Incoming User-Agents
 
 	<Directory "/">
 		WLEnabled On
-		WLDebug On
 	</Directory>
 
 
@@ -51,8 +50,7 @@ Using mod_wl with PHP, Python, etc.
 
 	<Directory "/">
 		WLEnabled On
-		WLDebug On
-		WLForward On
+		WLSubprocessEnv On
 	</Directory>
 
 Some PHP code to put it together
