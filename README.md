@@ -23,26 +23,26 @@ Compiling
 Verifiying Incoming User-Agents
 ------------------------------------
 
-		WLEnabled On
+	WLEnabled On
 
 
 Any user agent
 -----------------
 
-		WLEnabled On
-		WLBot "any"
+	WLEnabled On
+	WLBot "any"
 
 Matching browsers
 ------------------
 
-		WLEnabled On
-		WLBot "Mozilla5.0 | WebKit1.0 | Safari"
+	WLEnabled On
+	WLBot "Mozilla5.0 | WebKit1.0 | Safari"
 
 Using mod_wl with PHP, Python, etc.
 -----------------------------------
 
-		WLEnabled On
-		WLSubprocessEnv On
+	WLEnabled On
+	WLSubprocessEnv On
 
 Some PHP code to put it together
 ```
