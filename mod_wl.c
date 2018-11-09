@@ -194,6 +194,9 @@ static char* wl_reverse_dns(char* addr)
     
     inet_pton(AF_INET, addr, &ipv4addr);
     he = gethostbyaddr(&ipv4addr, sizeof(ipv4addr), AF_INET);
+    if ( he == NULL ) {
+      return NULL;
+    }
     
     return he->h_name;
 }
@@ -576,6 +579,13 @@ static int wl_init(request_rec* rec)
     AP_LOG_INFO(rec, "Agent: %s did not match any needed user agents", agent);
 #endif
      addr = wl_reverse_dns(addr);
+     if (addr == NULL) {
+#if WL_MODULE_DEBUG_MODE
+    AP_LOG_INFO(rec, "Couldn't call gethostbyaddr on %s", initial);
+#endif
+        return wl_close(DECLINED);
+    }
+
 
 #if WL_MODULE_DEBUG_MODE
     AP_LOG_INFO(rec, "Reverse dns is: %s", addr);
