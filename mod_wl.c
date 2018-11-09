@@ -284,26 +284,6 @@ static void wl_reset_wl()
 }
 
 /**
- * check if this IP is already  
- * whitelisted
- * 
- * @param -> IPv4 address
- */
-static int wl_in_wl(char* addr)
-{
-    while (wl_element) {
-        if (!strcasecmp(wl_element->addr, addr)) {
-            wl_reset_wl();
-            return 1;
-	}
-
-        wl_element = wl_element->next;
-    }
-    wl_reset_wl();
-    return 0;
-}
-
-/**
  * same as wl_reset_wl/0
  * for blacklists
  * 
@@ -312,27 +292,6 @@ static void wl_reset_bl()
 {
     bl_element = bl_head;
 }
-
-/**
- * same as wl_in_wl/1
- * for blacklists
- * 
- * @param: addr -> IPv4 address
- */
-static int wl_in_bl(char* addr)
-{
-    while (bl_element) {
-        if (!strcasecmp(bl_element->addr, addr)) {
-            wl_reset_bl(); 
-            return 1;
-        }
-
-        bl_element = bl_element->next;
-    }
-    wl_reset_bl();
-    return 0;
-}
-
 
 /** 
  * append to the whitelist
@@ -514,58 +473,6 @@ static char* wl_replace_ip(char *addr, char *rep, char *with) {
     return result;
 }
 
-
-/**
- * load the specified  whitelist file into
- * memory
- *
- * @param fl -> path to file
- * @param rec -> Apache 2 request
- */
-static void wl_load_wl(char* fl, request_rec* rec)
-{
-    apr_file_t* wl_file;
-    apr_status_t wl_st;
-    apr_size_t datalen = 256;
-    char data[256]; 
-
-    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, 0, rec->pool);
-    // Can't use file..
-    if (!(wl_st == APR_SUCCESS))
-	return;
-
-    while (apr_file_gets(data, datalen, wl_file) == APR_SUCCESS) 
-        wl_strip_append_wl(data);
-
-    wl_st = apr_file_close(wl_file);
-    wl_wl_loaded = 1;
-}
-
-/**
- * same as wl_load_wl/2 for black lists
- *
- * @param fl -> path to file
- * @param rec -> Apache 2 request
- */
-static void wl_load_bl(char* fl, request_rec* rec)
-{
-    apr_file_t* wl_file;
-    apr_status_t wl_st;
-    apr_size_t datalen = 256;
-    char data[256]; 
-
-    wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, 0, rec->pool);
-    // Can't use file..
-    if (!(wl_st == APR_SUCCESS))
-	return;
-
-    while (apr_file_gets(data, datalen, wl_file) == APR_SUCCESS)
-        wl_strip_append_bl(data);
-
-    wl_st = apr_file_close(wl_file);
-    wl_bl_loaded = 1;
-}
-
 /**
  * point the bot list to 
  * head
@@ -586,7 +493,7 @@ static void wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg)
     apr_file_t* wl_file;
     apr_status_t wl_st;
     apr_size_t datalen = 256;
-    char* data; 
+    char* data = ""; 
     char* bot;
 
     wl_st = apr_file_open(&wl_file, fl, APR_FOPEN_CREATE | APR_FOPEN_READ, 0, rec->pool);
@@ -670,6 +577,10 @@ static int wl_init(request_rec* rec)
 #endif
      addr = wl_reverse_dns(addr);
 
+#if WL_MODULE_DEBUG_MODE
+    AP_LOG_INFO(rec, "Reverse dns is: %s", addr);
+#endif
+
      if (wl_cfg->spenv == 1) {
   	apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
      }
@@ -680,21 +591,11 @@ static int wl_init(request_rec* rec)
 	apr_table_set(rec->subprocess_env, "MODWL_FORWARD_DNS", addr);
      }
 
-    addr = wl_reverse_dns(addr);
-
-    if (wl_cfg->spenv == 1) {
-	apr_table_set(rec->subprocess_env, "MODWL_REVERSE_DNS", addr);
-    }
-
-#if WL_MODULE_DEBUG_MODE
-    AP_LOG_INFO(rec, "Reverse dns is: %s", addr);
-#endif
-
 #if WL_MODULE_DEBUG_MODE
     AP_LOG_INFO(rec, "Final conversion of remote ip is: %s", addr);
 #endif 
 
-    if (strcasecmp(initial, addr)) {
+    if (strcasecmp(initial, addr) != 0) {
         if (wl_cfg->btauto == 1) {
             wl_append_bot(wl_cfg, agent);
         }
@@ -997,21 +898,18 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 {
     apr_file_t* wl_file;
     apr_status_t wl_file_st;
-    wl_config* wl_cfg = (wl_config*) ap_get_module_config(rec->per_dir_config, &wl_module);
+    char* new_line;
 
-    if (strcasecmp(fl, "")) {
+    if (strcasecmp(fl, "") != 0) {
 	    wl_file_st = apr_file_open(&wl_file, 
 				       fl,
-				       APR_BUFFERED | // set buffered 
-				       APR_BINARY |   // ignored in unix env 
-				       APR_CREATE |   // allow file creation 
-				       APR_WRITE |    // move to end of file on open
-				       APR_APPEND,    // only append to this file 
-				       APR_REG,
-				       rec->pool);
+              APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_APPEND,
+              APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_GREAD,
+				      rec->pool);
 	       
 
             if (!(wl_file_st == APR_SUCCESS)) {
+              AP_LOG_INFO(rec, "Couldn't open list file %s", fl);
 		return;
             }
 
@@ -1021,7 +919,8 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 
 
 	    if (wl_file_st == APR_SUCCESS) {
-		    apr_file_puts(addr, wl_file);
+        new_line = wl_concat(addr, "\n");
+		    apr_file_puts(new_line, wl_file);
 		    apr_file_close(wl_file);
 
 #if WL_MODULE_DEBUG_MODE
@@ -1029,13 +928,14 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 #endif
 		    return;
 	    } 
+
             return;
 #if WL_MODULE_DEBUG_MODE
-      AP_LOG_INFO(rec, "Whitelist couldn't add: %s, (status err): %d", addr, wl_file_st);
+      AP_LOG_INFO(rec, "Whitelist couldn't lock: %s, (status err): %d", addr, wl_file_st);
 #endif
     }
 #if WL_MODULE_DEBUG_MODE
-    AP_LOG_INFO(rec, "Whitelist couldn't add: %s", addr);
+    AP_LOG_INFO(rec, "Whitelist disabled not adding: %s to storage list", addr);
 #endif
 }
 
@@ -1048,7 +948,6 @@ inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 static const command_rec wl_directives[] = 
 {
     AP_INIT_TAKE1("wlEnabled", wl_set_enabled, NULL, RSRC_CONF, "ENABLE OR DISABLE WL"),
-    AP_INIT_TAKE1("wlListEnabled", wl_set_list, NULL, ACCESS_CONF, "SET WL's WHITELIST"),
     AP_INIT_TAKE1("wlList", wl_set_list, NULL, RSRC_CONF, "SET WL's WHITELIST"),
     AP_INIT_TAKE1("wlBlackList", wl_set_blist, NULL, RSRC_CONF, "SET WL'S BLACKLIST"),
     AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF, "DEBUG MODE"),

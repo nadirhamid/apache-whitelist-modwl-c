@@ -23,35 +23,26 @@ Compiling
 Verifiying Incoming User-Agents
 ------------------------------------
 
-	<Directory "/">
 		WLEnabled On
-	</Directory>
 
 
 Any user agent
 -----------------
 
-	<Directory "/">
 		WLEnabled On
 		WLBot "any"
-	</Directory>
 
 Matching browsers
 ------------------
 
-	<Directory "/">
 		WLEnabled On
 		WLBot "Mozilla5.0 | WebKit1.0 | Safari"
-	</Directory>
-
 
 Using mod_wl with PHP, Python, etc.
 -----------------------------------
 
-	<Directory "/">
 		WLEnabled On
 		WLSubprocessEnv On
-	</Directory>
 
 Some PHP code to put it together
 ```
@@ -66,7 +57,4 @@ echo "Status: " . $_SERVER{'MODWL_STATUS'};
 
 More Examples
 ------------------
-You can find more examples in ./tests. 
- 
-
-More coming soon..
+You can find more examples in ./examples. 
