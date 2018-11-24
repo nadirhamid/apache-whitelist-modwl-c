@@ -107,8 +107,6 @@ typedef struct {
     int                  lenabled;
     int                dnstimeout;
     int			    spenv;
-    int                listappend;
-    int               blistappend;
     bitem*                   cbot;
     bitem*                  chead;
 } wl_config;
@@ -123,7 +121,6 @@ static int                    wl_close(int status);
 static int                    wl_ip_addr_cmp(request_rec* rec, addr* reg_ip_addr, char* ip_addr);
 static void                   wl_create_addr(request_rec* rec, char* net, addr* c_addr);
 
-static int                    wl_can_append(wl_config* wl_cfg, int bt);
 static void                   wl_cleanup_list();
 static void                   wl_hooks(apr_pool_t* pool);
 static char*                  wl_forward_dns(char* addr);
@@ -133,12 +130,15 @@ static void                   wl_append_wl(request_rec* rec, char* ip_addr);
 static void                   wl_append_bl(request_rec* rec, char* ip_addr);
 static void                   wl_fail(const char* what);
 static void*                  wl_xmalloc(size_t sz);
-static void 		              wl_reset(int bl);
+static void 		      wl_reset_wl();
 static int                    wl_in(request_rec* rec, char* addr, int bl);
+static void 		      wl_reset_bl();
+static int                    wl_in_bl(char* addr);
 static void                   wl_load(char* fl, request_rec* rec, int bl);
-static void 		              wl_reset_bots();
+static void 		      wl_reset_bots();
 static void                   wl_load_bots(char* fl, request_rec* rec, wl_config* wl_cfg);
 static void                   wl_strip_ip(char *addr, char* strip);
+static char*                  wl_replace_ip(char* addr, char* rep, char* with);
 const char*                   apr_table_get(const apr_table_t* t, const char* key);
 static item*                  wl_element;
 static item*                  bl_element;
@@ -146,19 +146,16 @@ inline static int             wl_in_agents(char* agent, wl_config* wl_cfg);
 inline static void            wl_append_bot(wl_config* wl_cfg, char* bot);
 inline static void*           wl_server_config(apr_pool_t* pool, server_rec* s);
 inline static void*           wl_dir_config(apr_pool_t* pool, char* context);
-inline static void            wl_append_list(wl_config* wl_cfg, char* fl, char* addr, request_rec* rec, int bt);
+inline static void            wl_append_list(char* fl, char* addr, request_rec* rec);
 const char*                   wl_set_enabled(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_list_enabled(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_block_handler(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_bot(cmd_parms* cmd, void* cfg, const char* args);
 const char*                   wl_set_list(cmd_parms* cmd, void* cfg, const char* arg);
-const char*                   wl_set_list_append(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_blist(cmd_parms* cmd, void* cfg, const char* arg);
-const char*                   wl_set_blist_append(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_bot_auto_add(cmd_parms* cmd, void* cfg, const char* arg);
 const char*                   wl_set_dns_timeout(cmd_parms* cmd, void* cfg, const char* arg);
 const char*		      wl_concat(char* ip1, char* ip2);
-static void                   wl_loaded(int bl);
 static int                    wl_wl_loaded = 0;
 static int                    wl_bl_loaded = 0;
 static int                    wl_bots_loaded = 0;
@@ -174,7 +171,7 @@ static item*                  bl_head = NULL;
  */
 static void wl_fail(const char* what)
 {
-    fprintf(stderr, "wl_module: system call failed: %s: %s", what, what);
+    fprintf(stderr, "wl_module: system call failed: %s: %s\n", what, what);
 }
 
 /**
@@ -192,24 +189,6 @@ static void* wl_xmalloc(size_t sz)
     wl_fail((char*) "malloc");
 
     return (char*)"";
-}
-
-/**
- * this checks if we have enabled
- * adding to the lists automatically
- * 
- * @param wl_cfg -> WL config
- * @param bl -> blacklist
- */
-static int wl_can_append(wl_config* wl_cfg, int bl)
-{
-  if (bl == 0 && wl_cfg->blistappend == 1){
-    return 1;
-  }
-  if (wl_cfg->listappend == 1) {
-    return 1;  
-  }
-  return 0;
 }
 
 /**
@@ -249,7 +228,6 @@ static char* wl_forward_dns(char* addr_a)
     struct addrinfo hints, *res, *p;
     int status;
     char ipstr[INET6_ADDRSTRLEN];
-    struct in_addr* taddr = NULL;
 
     memset(&hints, 0, sizeof(hints));    
     hints.ai_family = AF_UNSPEC;
@@ -261,6 +239,8 @@ static char* wl_forward_dns(char* addr_a)
     p = res;
 
     while (p != NULL) {
+            void* taddr;
+
             if (p->ai_family == AF_INET) {
                 struct sockaddr_in* ipv4 = (struct sockaddr_in *) p->ai_addr;
                 taddr = &(ipv4->sin_addr);
@@ -314,16 +294,23 @@ inline static int wl_in_agents(char* agent, wl_config* wl_cfg)
 }
 
 /**
- * point list to its head
- * @param bl is this the blacklist
+ * point the whitelist to 
+ * it's head
+ * 
  */
-static void wl_reset(int bl)
+static void wl_reset_wl()
 {
-    if (bl == 0) {
-      bl_element = bl_head; 
-      return;
-    }
     wl_element = wl_head;
+}
+
+/**
+ * same as wl_reset_wl/0
+ * for blacklists
+ * 
+ */
+static void wl_reset_bl()
+{
+    bl_element = bl_head;
 }
 
 static void wl_append(request_rec* rec, char* ip_addr, int bl)
@@ -348,7 +335,7 @@ static void wl_append_wl(request_rec* rec, char* ip_addr)
     wl_create_addr( rec, ip_addr, wl_element->addr);
     wl_element->next = wl_head;
     wl_head = wl_element;
-    AP_LOG_INFO(rec, "wl_append_wl address added is %s, bits %d", wl_element->addr->addr, wl_element->addr->bits);
+    AP_LOG_INFO(rec, "wl_append_wl address added is %s, bits %d\r\n", wl_element->addr->addr, wl_element->addr->bits);
 }
 
 /**
@@ -383,7 +370,7 @@ void wl_create_addr(request_rec* rec, char* net, addr* c_addr)
     }
     token = strsep(&net, "/");
   }
-  AP_LOG_INFO(rec, "wl_create_addr created address %s with bits %d and cidr is %d", c_addr->addr, c_addr->bits, c_addr->cidr);
+  AP_LOG_INFO(rec, "wl_create_addr created address %s with bits %d and cidr is %d\r\n", c_addr->addr, c_addr->bits, c_addr->cidr);
 }
 
 /**
@@ -398,7 +385,7 @@ static int wl_ip_addr_cmp(request_rec* rec, addr* reg_ip_addr, char* ip_addr)
   struct in_addr ip;
   struct in_addr net;
   addr* c_addr = (addr*) malloc(sizeof(addr));
-  AP_LOG_INFO(rec, "wl_ip_addr_cmp called");
+  AP_LOG_INFO(rec, "wl_ip_addr_cmp called\r\n");
 
   wl_create_addr(rec, ip_addr, c_addr);
   inet_aton(reg_ip_addr->addr, &ip);
@@ -406,25 +393,17 @@ static int wl_ip_addr_cmp(request_rec* rec, addr* reg_ip_addr, char* ip_addr)
 
   if (c_addr->bits == 0) {
     // C99 6.5.7 (3): u32 << 32 is undefined behaviour
-    AP_LOG_INFO(rec, "wl_ip_addr_cmp bits are 0. no need to compare..");
+    AP_LOG_INFO(rec, "wl_ip_addr_cmp bits are 0. no need to compare..\r\n");
     return 0;
   }
 
   inet_aton(reg_ip_addr->addr, &ip);
   inet_aton(ip_addr, &net);
-  AP_LOG_INFO(rec, "wl_ip_addr_cmp comparing registered %s/%d with %s", reg_ip_addr->addr, reg_ip_addr->bits, ip_addr);
+  AP_LOG_INFO(rec, "wl_ip_addr_cmp comparing registered %s/%d with %s\r\n", reg_ip_addr->addr, reg_ip_addr->bits, ip_addr);
 
-  return !((ip.s_addr ^ net.s_addr) & htonl(0xFFFFFFFFu << (32 - reg_ip_addr->bits)));
+  return !((ip.s_addr ^ net.s_addr) & htonl(0xFFFFFFFFu << (32 - c_addr->bits)));
 }
 
-static void wl_loaded(int bl)
-{
-  if (bl == 1) {
-    wl_bl_loaded = 1;
-    return;
-  }
-  wl_wl_loaded = 1;
-}
 /**
  * Load the specified 
  * List file into
@@ -435,13 +414,12 @@ static void wl_loaded(int bl)
  */
 static void wl_load(char* fl, request_rec* rec, int bl)
 {
-    apr_file_t* file;
+    apr_file_t* wl_file;
     apr_status_t wl_st;
     apr_size_t datalen = 256;
     char data[256]; 
-    char *pos;
 
-    wl_st = apr_file_open(&file,
+    wl_st = apr_file_open(&wl_file,
                           fl,
                           APR_FOPEN_CREATE | APR_FOPEN_READ,
                           APR_OS_DEFAULT,
@@ -451,26 +429,19 @@ static void wl_load(char* fl, request_rec* rec, int bl)
         return;
     }
 
-    while (apr_file_gets(data, datalen, file) == APR_SUCCESS) {
-        if ((pos=strchr(data, '\n')) == NULL) {
-            AP_LOG_ERR(rec, "could not process %s file because input buffer was too long", fl);
-            wl_cleanup_list();
-            return;
-        }
-        *pos = '\0';
-
-        AP_LOG_INFO(rec, "wl_load_wl adding address %s into list", data);
+    while (apr_file_gets(data, datalen, wl_file) == APR_SUCCESS) {
+        AP_LOG_INFO(rec, "wl_load_wl adding address %s into list\r\n", data);
         wl_append(rec, data, bl);
     }
 
-    wl_st = apr_file_close(file);
+    wl_st = apr_file_close(wl_file);
     if (wl_st != APR_SUCCESS) {
-        AP_LOG_INFO(rec, "could not close file %s", fl);
+        AP_LOG_INFO(rec, "could not close file %s\r\n", fl);
         wl_cleanup_list();
         return;
     }
 
-    wl_loaded( bl );
+    wl_wl_loaded = 1;
 }
 
 /**
@@ -490,14 +461,13 @@ static int wl_in(request_rec* rec, char* addr, int bl)
 
   while (element) {
       if (wl_ip_addr_cmp(rec, element->addr, addr) == 1) {
-          wl_reset(bl);
+          wl_reset_wl();
           return 1;
       }
 
-      element = element->next;
+      wl_element = wl_element->next;
   }
-  wl_reset(bl);
-  return 0;
+  wl_reset_wl();
 }
     
 
@@ -546,6 +516,60 @@ const char* wl_concat(char* ip1, char* ip2)
     strcpy(result, ip1);
     strcat(result, ip2);
 
+    return result;
+}
+
+/**
+ * remove the trailing /32 or /16
+ * on a ip address
+ *
+ * @param addr -> IPv4 address
+ * @param rep -> port string "/32" or "/16"
+ * @param with -> replacement string
+ */ 
+static char* wl_replace_ip(char *addr, char *rep, char *with) {
+    char *result;       //the return string
+    char *ins;          // the next insert point
+    char *tmp;          // varies
+    int len_rep;        // length of rep
+    int len_with;       // length of with
+    int len_front;      // distance between rep and end of last rep
+    int count;          // number of replacements
+
+    result = "";
+
+    if (!addr)
+        return result;
+
+    if (!rep)
+        rep = "";
+
+    len_rep = strlen(rep);
+
+    if (!with)
+        with = "";
+
+    len_with = strlen(with);
+
+    ins = addr;
+
+    for (count = 0; (tmp = strstr(ins, rep)); ++count) 
+        ins = tmp + len_rep;
+
+    tmp = result = malloc(strlen(addr) + (len_with - len_rep) * count + 1);
+
+    if (!result)
+        return result;
+    
+    while (count--) {
+        ins = strstr(addr, rep);
+        len_front = ins - addr;
+        tmp = strncpy(tmp, addr, len_front) + len_front;
+        tmp = strcpy(tmp, with) + len_with;
+        addr += len_front + len_rep; // move to next "end of rep"
+    }
+
+    strcpy(tmp, addr);
     return result;
 }
 
@@ -606,7 +630,7 @@ static int wl_init(request_rec* rec)
     char* addr;
     char* initial;
     char* agent;
-    AP_LOG_INFO(rec, "wl_init called");
+    AP_LOG_INFO(rec, "wl_init called\r\n");
     wl_config* wl_cfg = (wl_config*) ap_get_module_config(rec->per_dir_config, &wl_module);
         
     if (wl_cfg->spenv == 1) {
@@ -618,18 +642,13 @@ static int wl_init(request_rec* rec)
     }
 
     if (strcasecmp(wl_cfg->btlist, "") && wl_bots_loaded != 1) {
-        AP_LOG_INFO(rec, "loading bot list into memory");
+        AP_LOG_INFO(rec, "loading bot list into memory\r\n");
         wl_load_bots(wl_cfg->btlist, rec, wl_cfg);
     }
 
     if (strcasecmp(wl_cfg->list, "") && wl_wl_loaded != 1) {
-        AP_LOG_INFO(rec, "loading white list into memory");
+        AP_LOG_INFO(rec, "loading white list into memory\r\n");
         wl_load(wl_cfg->list, rec, 0);
-    }
-
-    if (strcasecmp(wl_cfg->blist, "") && wl_bl_loaded != 1) {
-        AP_LOG_INFO(rec, "loading black list into memory");
-        wl_load(wl_cfg->blist, rec, 1);
     }
 
 
@@ -643,16 +662,9 @@ static int wl_init(request_rec* rec)
 	apr_table_set(rec->subprocess_env, "MODWL_ORIGINAL", addr);
     }
 
-    if ( wl_wl_loaded == 1 && wl_in(rec, addr, 0)  == 1) {
-      AP_LOG_INFO(rec, "Found address: %s in whitelist. will not reverse/forward DNS", addr);
+    if ( wl_wl_loaded == 1 && wl_in_wl(rec, addr)  == 1) {
       return (OK);
     }
-
-    if ( wl_bl_loaded == 1 && wl_in(rec, addr, 1)  == 1) {
-      AP_LOG_INFO(rec, "Found address: %s in blacklist. rejecting request", addr);
-      return (DECLINED);
-    }
-
 
 #if WL_MODULE_DEBUG_MODE
     AP_LOG_INFO(rec, "Original remote ip is: %s", addr);
@@ -708,14 +720,14 @@ static int wl_init(request_rec* rec)
         }
 
         wl_append_bl(rec, initial);
-        wl_append_list(wl_cfg, wl_cfg->blist, initial, rec, 1);
+        wl_append_list(wl_cfg->blist, initial, rec);
 	apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_FAIL);
         return wl_close(DECLINED);
     }
     // add to white list
 
     wl_append_wl(rec, initial);
-    wl_append_list(wl_cfg, wl_cfg->list, initial, rec, 0);
+    wl_append_list(wl_cfg->list, initial, rec);
     apr_table_set(rec->subprocess_env, "MODWL_STATUS", WL_MODULE_STATUS_OK);
 
     return wl_close(OK);
@@ -967,26 +979,6 @@ const char* wl_set_list(cmd_parms* cmd, void* cfg, const char* arg)
 }
 
 /**
- * add new IP addresses to the whitelist automaticall
- *
- * @param cmd -> configuration inherit from httpd.conf
- * @param cfg -> configuration structure
- * @param arg -> config set value
- */
-const char* wl_set_list_append(cmd_parms* cmd, void* cfg, const char* arg)
-{
-    wl_config* wl_cfg = (wl_config*) cfg;
-    if (!strcasecmp(arg, "on")) {
-            wl_cfg->listappend = 1;
-    } else {
-            wl_cfg->listappend = 0;
-    }
-
-    return NULL;
-}
-
-
-/**
  * same as wl_set_list/2 for blacklists
  *
  * @param cmd -> configuration inherit from httpd.conf
@@ -1001,27 +993,6 @@ const char* wl_set_blist(cmd_parms* cmd, void* cfg, const char* arg)
     return NULL;
 }
 
-/**
- * same as wl_set_list_append/2 for blacklists
- *
- * @param cmd -> configuration inherit from httpd.conf
- * @param cfg -> configuration structure
- * @param arg -> config set value
- */
-const char* wl_set_blist_append(cmd_parms* cmd, void* cfg, const char* arg)
-{
-    wl_config* wl_cfg = (wl_config*) cfg;
-    if (!strcasecmp(arg, "on")) {
-            wl_cfg->blistappend = 1;
-    } else {
-            wl_cfg->blistappend = 0;
-    }
-
-    return NULL;
-}
-
-
-
 
 /**
  * registers the hook in the Apache
@@ -1033,25 +1004,20 @@ static void wl_hooks(apr_pool_t* pool)
     ap_hook_post_read_request(wl_init, NULL, NULL, APR_HOOK_MIDDLE); // middle was present in initial version. 
 }
 
+
 /**
  * open the whitelist file and append a
  * ip address.
  *
- * @param wl_cfg -> WL congi
  * @param fl -> file path
  * @param addr -> IPv4 address
  * @param rec -> Apache 2 request
  */
-inline static void wl_append_list(wl_config* wl_cfg, char* fl, char* addr, request_rec* rec, int bt)
+inline static void wl_append_list(char* fl, char* addr, request_rec* rec)
 {
     apr_file_t* wl_file;
     apr_status_t wl_file_st;
     const char* new_line;
-
-    if (wl_can_append(wl_cfg, bt) != 1) {
-      AP_LOG_INFO(rec, "appending is disabled for list %s. not adding to file", fl);
-      return;
-    }
 
     if (strcasecmp(fl, "") != 0) {
 	    wl_file_st = apr_file_open(&wl_file, 
@@ -1102,9 +1068,7 @@ static const command_rec wl_directives[] =
 {
     AP_INIT_TAKE1("wlEnabled", wl_set_enabled, NULL, RSRC_CONF, "ENABLE OR DISABLE WL"),
     AP_INIT_TAKE1("wlList", wl_set_list, NULL, RSRC_CONF, "SET WL's WHITELIST"),
-    AP_INIT_TAKE1("wlListAppend", wl_set_list_append, NULL, RSRC_CONF, "SET WL's WHITELIST TO APPEND NEW ENTRIES"),
     AP_INIT_TAKE1("wlBlackList", wl_set_blist, NULL, RSRC_CONF, "SET WL'S BLACKLIST"),
-    AP_INIT_TAKE1("wlBlacklistAppend", wl_set_blist_append, NULL, RSRC_CONF, "SET WL's BLACKLIST TO APPEND NEW ENTRIES"),
     AP_INIT_TAKE1("wlBotList", wl_set_bot_list, NULL, RSRC_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlBotAutoAdd", wl_set_bot_auto_add, NULL, RSRC_CONF, "DEBUG MODE"),
     AP_INIT_TAKE1("wlDnsTimeout", wl_set_dns_timeout, NULL, ACCESS_CONF, "DEBUG MODE"),
