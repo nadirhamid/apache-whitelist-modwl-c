@@ -1,8 +1,7 @@
 Apache White List Module
 ===================================================
 
-This module blocks "unauthentic" HTTP requests by doing
-a Forward/Reverse DNS lookup.
+This module blocks unauthentic HTTP requests by doing DNS lookups agaisnt user agents.
 
 More information here:
 
